@@ -11,7 +11,7 @@ class ReplenishmentConfig:
     z: float
     cobertura_objetivo_dias: float
     umbral_exceso_semanas: float
-    presupuesto: float
+    presupuesto: float | None
     min_residuos: int
     as_of_date: str
     forecast_start_date: str
@@ -24,7 +24,7 @@ class ReplenishmentConfig:
     def __post_init__(self) -> None:
         if self.z < 0 or self.cobertura_objetivo_dias < 0 or self.umbral_exceso_semanas < 0:
             raise ValueError("z, cobertura_objetivo_dias y umbral_exceso_semanas deben ser >= 0")
-        if self.presupuesto < 0:
+        if self.presupuesto is not None and self.presupuesto < 0:
             raise ValueError("presupuesto debe ser >= 0")
         if self.min_residuos < 1:
             raise ValueError("min_residuos debe ser >= 1")
@@ -41,4 +41,7 @@ def load_config(path: str | Path | None = None, **overrides: Any) -> Replenishme
         with Path(path).open("rb") as stream:
             values.update(tomllib.load(stream))
     values.update(overrides)
+    # TOML no tiene null: cadena vacía o clave omitida significan sin tope.
+    if values.get("presupuesto") in (None, ""):
+        values["presupuesto"] = None
     return ReplenishmentConfig(**values)

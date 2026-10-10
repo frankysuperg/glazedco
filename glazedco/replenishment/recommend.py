@@ -2,7 +2,7 @@
 
 Fórmulas (unidades = piezas; no se recalculan modelos):
 - sigma_lt = desviacion_serie × √(lead_time_semanas); si n_residuos < min_residuos,
-  se usa la desviación de la categoría del SKU.
+  se usa sigma_relativa_categoria × demanda_semanal_media_pronosticada.
 - stock_seguridad = z × sigma_lt
 - ROP = demanda_esperada_durante_lead_time + stock_seguridad
 - stock_proyectado(t) = existencias + en_tránsito − demanda_acumulada_hasta_t
@@ -31,6 +31,7 @@ from .lead_time import estimate_supplier_lead_times
 OUTPUT_COLUMNS = [
     "sku", "store_id", "cantidad", "fecha_pedido",
     "riesgo_quiebre", "riesgo_exceso", "motivo",
+    "stock_seguridad", "fuente_desviacion", "valores_por_defecto",
 ]
 
 
@@ -70,28 +71,41 @@ def category_desviaciones(
     errors: pd.DataFrame,
     products: pd.DataFrame,
     config: ReplenishmentConfig,
+    observed_demand: pd.DataFrame | None = None,
 ) -> dict[str, float]:
-    """Desviación de categoría = mediana de desviaciones con n >= min_residuos."""
+    """Mediana por categoría de std(residuos / media observada de la serie).
+
+    Para una media constante positiva m, std(e/m)=std(e)/m: podemos usar el
+    resumen existente de residuos sin recalcular modelos. No se normaliza
+    por el pronóstico; medias observadas cero/ausentes no aportan al respaldo.
+    """
+    if observed_demand is None:
+        return {}
+    errors = errors.merge(observed_demand, on=["store_id", "sku"], how="left", validate="one_to_one")
     frame = errors.merge(
-        products[["sku"]].assign(categoria=_category_series(products, config)),
+        products[["sku"]].assign(categoria=_category_series(products, config)).drop_duplicates("sku"),
         on="sku",
         how="left",
     )
     frame["categoria"] = frame.categoria.fillna("__sin_categoria__")
+    frame["n_residuos"] = pd.to_numeric(frame.n_residuos, errors="coerce")
+    deviation = pd.to_numeric(frame.desviacion, errors="coerce")
+    observed = pd.to_numeric(frame.demanda_observada_media, errors="coerce")
+    frame["relativa"] = deviation / observed.where(observed.gt(0))
     usable = frame.loc[
         frame.n_residuos.ge(config.min_residuos)
-        & pd.to_numeric(frame.desviacion, errors="coerce").notna()
+        & np.isfinite(frame.relativa) & frame.relativa.ge(0)
     ]
     if usable.empty:
         return {}
     return {
-        str(cat): float(pd.to_numeric(group.desviacion, errors="coerce").median())
+        str(cat): float(group.relativa.median())
         for cat, group in usable.groupby("categoria", dropna=False)
     }
 
 
 def _risk_stockout(days_cover: float, lead_time_days: float) -> str:
-    if not np.isfinite(days_cover) or lead_time_days <= 0:
+    if np.isnan(days_cover) or not np.isfinite(lead_time_days) or lead_time_days <= 0:
         return "desconocido"
     ratio = days_cover / lead_time_days
     if ratio < 1.0:
@@ -102,7 +116,7 @@ def _risk_stockout(days_cover: float, lead_time_days: float) -> str:
 
 
 def _risk_excess(weeks_cover: float, threshold: float) -> str:
-    if not np.isfinite(weeks_cover):
+    if np.isnan(weeks_cover):
         return "desconocido"
     return "alto" if weeks_cover > threshold else "bajo"
 
@@ -161,6 +175,7 @@ def recommend_replenishment(
     suppliers: pd.DataFrame,
     config: ReplenishmentConfig,
     prices: pd.DataFrame | None = None,
+    observed_demand: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Genera recomendaciones a nivel sucursal con columnas fijas de salida."""
     as_of = _parse_date(config.as_of_date)
@@ -168,7 +183,7 @@ def recommend_replenishment(
     fallback_order_date = as_of + timedelta(days=1)
     daily = daily_rates_from_forecast(forecast, as_of=as_of, forecast_start=forecast_start)
     lead = estimate_supplier_lead_times(purchase_orders, suppliers, config)
-    cat_sigma = category_desviaciones(errors, products, config)
+    cat_sigma = category_desviaciones(errors, products, config, observed_demand)
 
     prod = products.drop_duplicates("sku", keep="first").copy()
     prod["categoria"] = _category_series(prod, config)
@@ -186,19 +201,20 @@ def recommend_replenishment(
     prod.loc[missing_lt, "lead_time_days"] = config.default_lead_time_days
     prod.loc[missing_lt, "lead_time_source"] = "default_config"
     prod["fill_rate"] = pd.to_numeric(prod.fill_rate, errors="coerce")
-    prod.loc[prod.fill_rate.isna() | prod.fill_rate.le(0), "fill_rate"] = config.default_fill_rate
+    missing_fill = prod.fill_rate.isna() | prod.fill_rate.le(0)
+    prod.loc[missing_fill, "fill_rate"] = config.default_fill_rate
+    prod.loc[missing_fill, "fill_rate_source"] = "default_config"
 
     inv = inventory.copy()
     inv["date"] = pd.to_datetime(inv.date, errors="coerce")
     cutoff = inv.loc[inv.date.dt.date.eq(as_of)].copy()
-    if cutoff.empty:
-        raise ValueError(f"No hay inventory_daily en la fecha de corte {as_of.isoformat()}")
-    cutoff["existencias"] = pd.to_numeric(cutoff.closing_qty, errors="coerce").fillna(0.0)
+    cutoff["inventario_presente"] = True
+    cutoff["existencias"] = pd.to_numeric(cutoff.closing_qty, errors="coerce").astype(float)
     if "on_order_qty" in cutoff.columns:
-        cutoff["en_transito"] = pd.to_numeric(cutoff.on_order_qty, errors="coerce").fillna(0.0)
+        cutoff["en_transito"] = pd.to_numeric(cutoff.on_order_qty, errors="coerce").astype(float)
     else:
-        cutoff["en_transito"] = 0.0
-    stock = cutoff[["store_id", "sku", "existencias", "en_transito"]]
+        cutoff["en_transito"] = np.nan
+    stock = cutoff[["store_id", "sku", "existencias", "en_transito", "inventario_presente"]]
 
     err = errors.copy()
     for col in ("n_residuos", "sesgo", "desviacion"):
@@ -213,9 +229,9 @@ def recommend_replenishment(
     err_cols = [c for c in ("store_id", "sku", "method", "n_residuos", "desviacion") if c in err.columns]
     keys = keys.merge(err[err_cols], on=["store_id", "sku"], how="left")
     keys = keys.merge(margins[["sku", "unit_cost", "unit_margin"]], on="sku", how="left")
-    keys["existencias"] = keys.existencias.fillna(0.0)
-    keys["en_transito"] = keys.en_transito.fillna(0.0)
     keys = keys.loc[keys.inventory_tracked.fillna(False)]
+
+    weekly_mean = forecast.assign(_yhat=pd.to_numeric(forecast.yhat, errors="coerce")).groupby(["store_id", "sku"])._yhat.mean().to_dict()
 
     daily_map = {
         (store_id, sku): group.sort_values("date").reset_index(drop=True)
@@ -235,28 +251,34 @@ def recommend_replenishment(
         lead_days = float(row.lead_time_days) if pd.notna(row.lead_time_days) else float(config.default_lead_time_days)
         source = getattr(row, "lead_time_source", "")
         if source == "default_config":
-            notes.append(f"lead_time por defecto={lead_days:g}d")
+            notes.append(f"sin lead time observado; lead_time por defecto={lead_days:g}d")
         elif source == "suppliers.standard_lead_time_days":
             notes.append("lead_time de suppliers.standard_lead_time_days")
+        if row.fill_rate_source == "default_config":
+            notes.append(f"fill_rate por defecto={config.default_fill_rate:g}")
 
         series_daily = daily_map.get((row.store_id, row.sku))
         demand_series = series_daily.daily_demand if series_daily is not None else pd.Series(dtype=float)
-        lt_demand = demand_during_days(demand_series, lead_days)
+        valid_lead = np.isfinite(lead_days) and lead_days > 0
+        lt_demand = demand_during_days(demand_series, lead_days) if valid_lead else float("nan")
 
         n_res = int(row.n_residuos) if pd.notna(getattr(row, "n_residuos", np.nan)) else 0
         sigma = float(row.desviacion) if pd.notna(getattr(row, "desviacion", np.nan)) else float("nan")
+        sigma_source = "serie"
         if n_res < config.min_residuos or not np.isfinite(sigma):
             cat = str(row.categoria) if pd.notna(getattr(row, "categoria", pd.NA)) else "__sin_categoria__"
             sigma_cat = cat_sigma.get(cat)
             if sigma_cat is not None and np.isfinite(sigma_cat):
-                sigma = float(sigma_cat)
-                notes.append(f"desviacion de categoría={cat}")
+                sigma = float(sigma_cat) * float(weekly_mean[(row.store_id, row.sku)])
+                sigma_source = "categoria_relativa"
+                notes.append(f"desviacion relativa de categoría={cat} (coef={sigma_cat:.6g})")
             else:
                 sigma = float(config.default_desviacion)
+                sigma_source = "default_config"
                 notes.append("desviacion por defecto (sin residuos de categoría)")
 
         # sigma_lt = desviacion × √(lead_time en semanas)
-        sigma_lt = sigma * math.sqrt(max(lead_days, 0.0) / 7.0)
+        sigma_lt = sigma * math.sqrt(lead_days / 7.0) if valid_lead else float("nan")
         safety = config.z * sigma_lt
         rop = lt_demand + safety
 
@@ -270,17 +292,39 @@ def recommend_replenishment(
             else:
                 notes.append("perecedero sin shelf_life_days usable")
         cobertura_units = demand_during_days(demand_series, cobertura_dias)
+        zero_demand = bool(len(demand_series)) and cobertura_units == 0 and (
+            lt_demand == 0 or demand_series.eq(0).all()
+        )
+        if zero_demand:
+            safety = 0.0
+            rop = 0.0
         on_hand = float(row.existencias) + float(row.en_transito)
-        raw_qty = max(0.0, cobertura_units + safety - on_hand)
+        inventory_known = np.isfinite(on_hand) and row.existencias >= 0 and row.en_transito >= 0
+        raw_qty = max(0.0, cobertura_units + safety - on_hand) if inventory_known and valid_lead and not zero_demand else 0.0
         cantidad = _ceil_multiple(raw_qty, case_size)
 
         fecha_pedido = _first_order_date(series_daily, on_hand, rop, fallback_order_date)
 
         avg_daily = float(demand_series.mean()) if len(demand_series) else 0.0
         days_cover = on_hand / avg_daily if avg_daily > 0 else float("inf")
-        weeks_cover = days_cover / 7.0 if np.isfinite(days_cover) else float("inf")
+        if not inventory_known:
+            days_cover = float("nan")
+            if pd.isna(row.inventario_presente):
+                notes.append(f"sin inventario al {as_of.isoformat()}")
+            elif not np.isfinite(row.existencias) or row.existencias < 0:
+                cause = "existencias negativas" if row.existencias < 0 else "existencias ausentes o no finitas"
+                notes.append(f"{cause} al {as_of.isoformat()}")
+            else:
+                cause = "en tránsito negativo" if row.en_transito < 0 else "en tránsito ausente o no finito"
+                notes.append(f"{cause} al {as_of.isoformat()}")
+        if not valid_lead:
+            notes.append(f"sin lead time válido (valor={lead_days:g})")
+        weeks_cover = days_cover / 7.0
         riesgo_quiebre = _risk_stockout(days_cover, lead_days)
         riesgo_exceso = _risk_excess(weeks_cover, config.umbral_exceso_semanas)
+        if zero_demand:
+            riesgo_quiebre = "bajo"
+            riesgo_exceso = ("alto" if row.existencias > 0 else "bajo") if np.isfinite(row.existencias) and row.existencias >= 0 else "desconocido"
 
         unit_cost = float(row.unit_cost) if pd.notna(getattr(row, "unit_cost", np.nan)) else float("nan")
         unit_margin = float(row.unit_margin) if pd.notna(getattr(row, "unit_margin", np.nan)) else float("nan")
@@ -295,13 +339,17 @@ def recommend_replenishment(
             if cantidad > 0:
                 notes.append("sin margen/costo confiable para priorizar")
 
-        if cantidad <= 0 and riesgo_quiebre == "bajo" and riesgo_exceso == "bajo":
+        if cantidad <= 0 and riesgo_quiebre == "bajo" and riesgo_exceso == "bajo" and not zero_demand:
             continue
 
-        if cantidad > 0:
+        if zero_demand:
+            motivo = "Sin pedido: sin demanda esperada (SS=0, cobertura infinita)"
+        elif cantidad > 0:
             motivo = f"Pedir {cantidad} (ROP={rop:.1f}, SS={safety:.1f}, LT={lead_days:g}d)"
         elif riesgo_exceso == "alto":
             motivo = f"Exceso de cobertura ({weeks_cover:.1f} sem > {config.umbral_exceso_semanas:g}); no pedir"
+        elif "desconocido" in (riesgo_quiebre, riesgo_exceso):
+            motivo = "Sin pedido: riesgo no evaluable"
         else:
             motivo = "Sin pedido: stock proyectado cubre política"
         if notes:
@@ -315,6 +363,9 @@ def recommend_replenishment(
             "riesgo_quiebre": riesgo_quiebre,
             "riesgo_exceso": riesgo_exceso,
             "motivo": motivo,
+            "stock_seguridad": safety,
+            "fuente_desviacion": sigma_source,
+            "valores_por_defecto": any("por defecto" in note for note in notes),
             "priority_score": score,
             "investment": investment if np.isfinite(investment) else float("inf"),
             "needs_order": cantidad > 0,
@@ -327,9 +378,12 @@ def recommend_replenishment(
     ordered = frame.sort_values(
         ["priority_score", "sku", "store_id"], ascending=[False, True, True], kind="stable",
     ).reset_index(drop=True)
-    remaining = float(config.presupuesto)
+    remaining = config.presupuesto
     funded_mask: list[bool] = []
     for item in ordered.itertuples(index=False):
+        if remaining is None:
+            funded_mask.append(True)
+            continue
         if not bool(item.needs_order):
             funded_mask.append(True)
             continue

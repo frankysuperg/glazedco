@@ -9,8 +9,9 @@ from glazedco.forecast.errors import series_forecast_errors
 from glazedco.forecast.evaluate import EvalResult
 from glazedco.forecast.select import Selection
 from glazedco.replenishment.config import load_config
-from glazedco.replenishment.demand import daily_rates_from_forecast
-from glazedco.replenishment.recommend import recommend_replenishment
+from glazedco.replenishment.demand import daily_rates_from_forecast, observed_weekly_means
+from glazedco.replenishment.recommend import category_desviaciones, recommend_replenishment
+from glazedco.replenishment.report import render_summary
 
 
 def _cfg(**overrides):
@@ -142,11 +143,14 @@ def test_pocos_residuos_usa_desviacion_de_categoria() -> None:
          "case_size": 1, "shelf_life_days": 30, "is_perishable": 0, "inventory_tracked": 1, "category": "donas"},
     ])
     config = _cfg(z=1.65, cobertura_objetivo_dias=7, presupuesto=1e9, min_residuos=8)
+    observed = pd.DataFrame({"store_id": ["S1"], "sku": ["B"], "demanda_observada_media": [140.0]})
     result = recommend_replenishment(
         forecast, errors, inventory, products, _orders(7), _suppliers(7), config,
+        observed_demand=observed,
     )
     row_a = result.loc[result.sku.eq("A")].iloc[0]
-    assert "desviacion de categoría=donas" in row_a.motivo
+    assert "desviacion relativa de categoría=donas" in row_a.motivo
+    assert row_a.stock_seguridad == pytest.approx(1.65 * (14 / 140) * 70)
 
 
 def test_perecedero_limita_cobertura_a_shelf_life() -> None:
@@ -195,3 +199,126 @@ def test_series_forecast_errors_usa_metodo_por_serie() -> None:
     assert row.method == "moving_average"
     assert row.n_residuos == 2
     assert row.sesgo == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("closing,excess", [(0, "bajo"), (10, "alto")])
+def test_demanda_cero_no_pide_y_no_deja_riesgos_desconocidos(closing, excess) -> None:
+    row = recommend_replenishment(
+        _forecast(yhat=0), _errors(desviacion=100), _inventory(closing=closing),
+        _products(), _orders(), _suppliers(), _cfg(),
+    ).iloc[0]
+    assert row.cantidad == row.stock_seguridad == 0
+    assert row.riesgo_quiebre == "bajo"
+    assert row.riesgo_exceso == excess
+    assert "sin demanda esperada" in row.motivo
+    assert "cobertura infinita" in row.motivo
+
+
+def test_desviacion_relativa_escala_con_volumen() -> None:
+    forecast = pd.concat([_forecast(store="S1", yhat=1), _forecast(store="S2", yhat=40)])
+    errors = pd.concat([_errors(store="S1", n=2), _errors(store="S2", n=2), _errors(store="donor", n=20, desviacion=14)])
+    observed = pd.DataFrame({"store_id": ["donor"], "sku": ["A"], "demanda_observada_media": [70]})
+    inventory = pd.concat([_inventory(store="S1"), _inventory(store="S2")])
+    result = recommend_replenishment(
+        forecast, errors, inventory, _products(), _orders(), _suppliers(), _cfg(),
+        observed_demand=observed,
+    ).set_index("store_id")
+    assert result.loc["S1", "stock_seguridad"] == pytest.approx(1.65 * 0.2)
+    assert result.loc["S2", "stock_seguridad"] == pytest.approx(40 * result.loc["S1", "stock_seguridad"])
+    assert result.fuente_desviacion.eq("categoria_relativa").all()
+
+
+@pytest.mark.parametrize("yhat", [0, 70])
+def test_riesgo_desconocido_explica_inventario_ausente(yhat) -> None:
+    inventory = _inventory().assign(date="2026-09-29")
+    row = recommend_replenishment(
+        _forecast(yhat=yhat), _errors(), inventory, _products(), _orders(), _suppliers(), _cfg(),
+    ).iloc[0]
+    assert row.cantidad == 0
+    assert row.riesgo_exceso == "desconocido"
+    assert row.riesgo_quiebre == ("bajo" if yhat == 0 else "desconocido")
+    assert "sin inventario al 2026-09-30" in row.motivo
+
+
+def test_riesgo_desconocido_explica_plazo_no_utilizable() -> None:
+    row = recommend_replenishment(
+        _forecast(), _errors(), _inventory(), _products(), _orders(0), _suppliers(), _cfg(),
+    ).iloc[0]
+    assert row.riesgo_quiebre == "desconocido"
+    assert "sin lead time válido (valor=0)" in row.motivo
+
+
+@pytest.mark.parametrize("budget", [None, ""])
+def test_presupuesto_vacio_no_aparta_pedidos(budget) -> None:
+    config = _cfg(presupuesto=budget)
+    assert config.presupuesto is None
+    assert _cfg().presupuesto is None
+    row = recommend_replenishment(
+        _forecast(yhat=70000), _errors(), _inventory(), _products(), _orders(), _suppliers(), config,
+    ).iloc[0]
+    assert row.cantidad * 2 > 50000
+    assert "Fuera de presupuesto" not in row.motivo
+
+
+def test_presupuesto_cero_si_restringe() -> None:
+    row = recommend_replenishment(
+        _forecast(), _errors(), _inventory(), _products(), _orders(), _suppliers(), _cfg(presupuesto=0),
+    ).iloc[0]
+    assert row.cantidad == 0
+    assert "Fuera de presupuesto" in row.motivo
+
+
+def test_demanda_cero_incluso_con_plazo_no_utilizable() -> None:
+    row = recommend_replenishment(
+        _forecast(yhat=0), _errors(), _inventory(), _products(), _orders(0), _suppliers(), _cfg(),
+    ).iloc[0]
+    assert row.cantidad == row.stock_seguridad == 0
+    assert row.riesgo_quiebre == row.riesgo_exceso == "bajo"
+
+
+def test_demanda_cero_en_plazo_y_cobertura_aunque_crezca_despues() -> None:
+    forecast = _forecast(yhat=0)
+    forecast.loc[forecast.horizonte.ge(3), "yhat"] = 70
+    row = recommend_replenishment(
+        forecast, _errors(), _inventory(), _products(), _orders(), _suppliers(), _cfg(),
+    ).iloc[0]
+    assert row.cantidad == row.stock_seguridad == 0
+    assert row.riesgo_quiebre == row.riesgo_exceso == "bajo"
+
+
+@pytest.mark.parametrize("closing,on_order,cause", [(float("nan"), 0, "existencias ausentes"), (-1, 0, "existencias negativas"), (0, float("nan"), "en tránsito ausente"), (0, -1, "en tránsito negativo")])
+def test_riesgo_desconocido_distingue_stock_invalido(closing, on_order, cause) -> None:
+    row = recommend_replenishment(
+        _forecast(), _errors(), _inventory(closing=closing, on_order=on_order), _products(), _orders(), _suppliers(), _cfg(),
+    ).iloc[0]
+    assert row.cantidad == 0
+    assert row.riesgo_quiebre == row.riesgo_exceso == "desconocido"
+    assert cause in row.motivo
+
+
+def test_media_observada_excluye_censura_y_semanas_no_cerradas() -> None:
+    panel = pd.DataFrame({
+        "store_id": ["S1"] * 5, "sku": ["A"] * 5,
+        "semana": ["2026-09-07", "2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05"],
+        "units_sold": [10, 20, 100, 1000, 10000], "entrenable": [True, True, False, True, True],
+    })
+    assert observed_weekly_means(panel, "2026-09-30").iloc[0].demanda_observada_media == 15
+
+
+def test_categoria_omite_medias_cero_ausentes_y_residuos_insuficientes() -> None:
+    errors = pd.concat([_errors(store=s, n=n, desviacion=d) for s, n, d in [("a", 20, 14), ("b", 20, 6), ("c", 20, 99), ("d", 2, 99), ("e", 20, 99)]])
+    observed = pd.DataFrame({"store_id": ["a", "b", "c", "d"], "sku": ["A"] * 4, "demanda_observada_media": [70, 20, 0, 1]})
+    assert category_desviaciones(errors, _products(), _cfg(), observed)["donas"] == pytest.approx(0.25)
+
+
+def test_resumen_reconcilia_series_y_defaults() -> None:
+    forecast = pd.concat([_forecast(), _forecast(sku="B"), _forecast(sku="C")])
+    products = pd.concat([_products(), _products(sku="B", inventory_tracked=0)])
+    result = recommend_replenishment(
+        forecast, _errors(n=0), _inventory(), products, _orders(), _suppliers(), _cfg(),
+    )
+    summary = render_summary(result, forecast, products, _cfg(), "sintética")
+    assert "Series pronosticadas: **3**; con recomendación: **1**; sin fila de recomendación: **2**" in summary
+    assert "sin control de inventario: **1**" in summary
+    assert "sin producto maestro: **1**" in summary
+    assert "Filas con algún valor por defecto: **1**" in summary

@@ -8,6 +8,21 @@ from datetime import date, timedelta
 import pandas as pd
 
 
+def observed_weekly_means(panel: pd.DataFrame, as_of: str | date) -> pd.DataFrame:
+    """Media observada por serie: semanas aptas cerradas, disponibles al corte.
+
+    El panel lo prepara weekly_demand existente; no ajustamos modelos ni
+    tratamos las semanas censuradas/cerradas como demanda cero.
+    """
+    end = pd.to_datetime(panel.semana) + pd.Timedelta(days=6)
+    valid = panel.entrenable.eq(True) & end.le(pd.Timestamp(as_of))
+    selected = panel.loc[valid, ["store_id", "sku", "units_sold"]].copy()
+    selected["units_sold"] = pd.to_numeric(selected.units_sold, errors="coerce")
+    return selected.groupby(["store_id", "sku"], as_index=False).units_sold.mean().rename(
+        columns={"units_sold": "demanda_observada_media"},
+    )
+
+
 def daily_rates_from_forecast(
     forecast: pd.DataFrame,
     *,

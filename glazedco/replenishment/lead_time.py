@@ -64,6 +64,8 @@ def estimate_supplier_lead_times(
     merged.loc[missing_lt, "lead_time_source"] = "default_config"
     merged["fill_rate"] = pd.to_numeric(merged.fill_rate, errors="coerce")
     missing_fr = merged.fill_rate.isna() | merged.fill_rate.le(0)
+    merged["fill_rate_source"] = "ordenes_validas"
+    merged.loc[missing_fr, "fill_rate_source"] = "default_config"
     merged.loc[missing_fr, "fill_rate"] = config.default_fill_rate
     merged["n_ordenes"] = pd.to_numeric(merged.n_ordenes, errors="coerce").fillna(0).astype(int)
-    return merged[["supplier_id", "lead_time_days", "fill_rate", "n_ordenes", "lead_time_source"]]
+    return merged[["supplier_id", "lead_time_days", "fill_rate", "n_ordenes", "lead_time_source", "fill_rate_source"]]

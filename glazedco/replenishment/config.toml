@@ -2,7 +2,8 @@
 z = 1.65
 cobertura_objetivo_dias = 14.0
 umbral_exceso_semanas = 6.0
-presupuesto = 50000.0
+# Vacío = sin restricción; un número (incluido 0) activa el tope.
+presupuesto = ""
 min_residuos = 8
 as_of_date = "2026-09-30"
 forecast_start_date = "2026-10-05"
