@@ -1,7 +1,7 @@
 # Impacto de anomalías en el pronóstico
 
 Fuente: PostgreSQL vía glazedco.cleaning (SELECT). Ajuste evaluado: **suavizar**, sobre copia; configuración habitual del pronóstico: conservar salvo opción explícita.
-Series semanales: 2169; semanas: 53; observaciones históricas ajustadas: **450**.
+Series semanales: 2169; semanas: 53; observaciones históricas ajustadas: **405**.
 
 ## Alertas diarias
 
@@ -21,20 +21,20 @@ Mismos orígenes, horizontes y valores observados originales en ambos escenarios
 
 | Modelo | Nivel | n pares/agregados | Sin ajuste % | Con ajuste % | Diferencia pp |
 |---|---|---:|---:|---:|---:|
-| moving_average | sku_sucursal | 15965 | 25.4436 | 25.7770 | 0.3334 |
-| moving_average | sucursal | 580 | 20.3721 | 20.6652 | 0.2931 |
-| moving_average | total | 16 | 18.4718 | 18.7784 | 0.3067 |
-| ridge | sku_sucursal | 15845 | 26.7983 | 26.9936 | 0.1953 |
-| ridge | sucursal | 580 | 20.5018 | 20.4586 | -0.0432 |
-| ridge | total | 16 | 18.3483 | 18.1302 | -0.2181 |
-| sba | sku_sucursal | 15965 | 31.5653 | 31.8238 | 0.2585 |
-| sba | sucursal | 580 | 24.7827 | 25.0004 | 0.2178 |
-| sba | total | 16 | 23.1977 | 23.4740 | 0.2764 |
-| seasonal_naive | sku_sucursal | 15965 | 28.1878 | 28.4580 | 0.2702 |
-| seasonal_naive | sucursal | 580 | 21.7538 | 22.0495 | 0.2958 |
-| seasonal_naive | total | 16 | 19.9352 | 20.2883 | 0.3531 |
+| moving_average | sku_sucursal | 14860 | 21.7838 | 22.1093 | 0.3255 |
+| moving_average | sucursal | 544 | 16.7133 | 16.9981 | 0.2848 |
+| moving_average | total | 15 | 14.7591 | 15.0579 | 0.2987 |
+| ridge | sku_sucursal | 14778 | 21.2949 | 21.4868 | 0.1919 |
+| ridge | sucursal | 544 | 14.4628 | 14.4843 | 0.0215 |
+| ridge | total | 15 | 11.9292 | 11.9806 | 0.0514 |
+| sba | sku_sucursal | 14860 | 28.4843 | 28.7568 | 0.2725 |
+| sba | sucursal | 544 | 21.5728 | 21.8069 | 0.2341 |
+| sba | total | 15 | 19.9202 | 20.2154 | 0.2952 |
+| seasonal_naive | sku_sucursal | 14860 | 25.3216 | 25.5662 | 0.2446 |
+| seasonal_naive | sucursal | 544 | 18.8553 | 19.1273 | 0.2720 |
+| seasonal_naive | total | 15 | 16.9853 | 17.3162 | 0.3309 |
 
-Referencia fija del escenario sin ajuste: **ridge**; WAPE total **18.3483% → 18.1302%**, diferencia **-0.2181 pp** (negativa = mejora). No se adopta el ajuste automáticamente ni se mezclan modelos para aparentar mejora.
+Referencia fija del escenario sin ajuste: **ridge**; WAPE total **11.9292% → 11.9806%**, diferencia **0.0514 pp** (negativa = mejora). No se adopta el ajuste automáticamente ni se mezclan modelos para aparentar mejora.
 
 ## Parámetros y límites
 

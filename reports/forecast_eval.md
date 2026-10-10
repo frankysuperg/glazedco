@@ -8,7 +8,7 @@ Unidades: `units_sold` observadas en `sales_daily` limpio con `apta_pronostico=T
 
 | filas | series | semanas | entrenables | censuradas | censura_desconocida | cierre | fuera_operacion | series_intermitentes | adi_umbral | adi_mediana |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 105238.0000 | 2169.0000 | 53.0000 | 49062.0000 | 55846.0000 | 0.0000 | 1056.0000 | 0.0000 | 744.0000 | 1.3200 | 1.0000 |
+| 105238.0000 | 2169.0000 | 53.0000 | 47344.0000 | 55846.0000 | 0.0000 | 1056.0000 | 0.0000 | 776.0000 | 1.3200 | 1.0000 |
 
 ## Censura y demanda no observada
 
@@ -31,18 +31,18 @@ WAPE = ∑|e| / ∑|y| × 100; denominador 0 → nulo. Sucursal y total agregan 
 
 | model | nivel | mae | rmse | wape | n |
 | --- | --- | --- | --- | --- | --- |
-| seasonal_naive | sku_sucursal | 19.8973 | 41.1128 | 28.1878 | 15965 |
-| seasonal_naive | sucursal | 422.6776 | 620.1801 | 21.7538 | 580 |
-| seasonal_naive | total | 14041.1875 | 16270.7427 | 19.9352 | 16 |
-| moving_average | sku_sucursal | 17.9602 | 37.8221 | 25.4436 | 15965 |
-| moving_average | sucursal | 395.8320 | 615.5377 | 20.3721 | 580 |
-| moving_average | total | 13010.4010 | 16678.7383 | 18.4718 | 16 |
-| sba | sku_sucursal | 22.2815 | 46.9607 | 31.5653 | 15965 |
-| sba | sucursal | 481.5294 | 723.7749 | 24.7827 | 580 |
-| sba | total | 16339.0401 | 20061.1016 | 23.1977 | 16 |
-| ridge | sku_sucursal | 18.9311 | 33.2687 | 26.7983 | 15845 |
-| ridge | sucursal | 394.9567 | 571.7401 | 20.3271 | 580 |
-| ridge | total | 12390.8920 | 16500.5519 | 17.5922 | 16 |
+| seasonal_naive | sku_sucursal | 18.6748 | 39.3115 | 25.3216 | 14860 |
+| seasonal_naive | sucursal | 379.8548 | 550.9760 | 18.8553 | 544 |
+| seasonal_naive | total | 12409.8000 | 13546.5099 | 16.9853 | 15 |
+| moving_average | sku_sucursal | 16.0656 | 34.0892 | 21.7838 | 14860 |
+| moving_average | sucursal | 336.7021 | 499.3154 | 16.7133 | 544 |
+| moving_average | total | 10783.3167 | 12373.0300 | 14.7591 | 15 |
+| sba | sku_sucursal | 21.0073 | 45.4003 | 28.4843 | 14860 |
+| sba | sucursal | 434.6010 | 650.7439 | 21.5728 | 544 |
+| sba | total | 14554.1236 | 17435.8744 | 19.9202 | 15 |
+| ridge | sku_sucursal | 15.6935 | 28.8661 | 21.2949 | 14778 |
+| ridge | sucursal | 291.2941 | 428.1016 | 14.4593 | 544 |
+| ridge | total | 8331.3853 | 11086.9355 | 11.4032 | 15 |
 
 ## Total por horizonte
 
@@ -51,39 +51,41 @@ WAPE = ∑|e| / ∑|y| × 100; denominador 0 → nulo. Sucursal y total agregan 
 | seasonal_naive | 1 | 14942.2500 | 15346.8104 | 19.7903 | 4 |
 | seasonal_naive | 2 | 11372.5000 | 11616.1423 | 16.0922 | 4 |
 | seasonal_naive | 3 | 7248.2500 | 9468.3182 | 10.2346 | 4 |
-| seasonal_naive | 4 | 22601.7500 | 24471.2050 | 34.9108 | 4 |
+| seasonal_naive | 4 | 17298.3333 | 17437.3675 | 22.7658 | 3 |
 | moving_average | 1 | 10183.2917 | 10347.1413 | 13.4873 | 4 |
 | moving_average | 2 | 8933.7500 | 9716.8852 | 12.6414 | 4 |
 | moving_average | 3 | 8373.3333 | 9667.2237 | 11.8233 | 4 |
-| moving_average | 4 | 24551.2292 | 28596.9377 | 37.9219 | 4 |
-| sba | 1 | 15106.1617 | 18370.4115 | 20.0074 | 4 |
-| sba | 2 | 12501.7425 | 14499.1509 | 17.6901 | 4 |
-| sba | 3 | 13748.5483 | 14969.9729 | 19.4132 | 4 |
-| sba | 4 | 23999.7078 | 28948.1210 | 37.0701 | 4 |
-| ridge | 1 | 3417.8415 | 4739.0066 | 4.5268 | 4 |
-| ridge | 2 | 10115.3807 | 10859.5341 | 14.3134 | 4 |
-| ridge | 3 | 11773.8655 | 13533.6437 | 16.6249 | 4 |
-| ridge | 4 | 24256.4802 | 27668.1347 | 37.4667 | 4 |
+| moving_average | 4 | 17262.7500 | 19292.7658 | 22.7189 | 3 |
+| sba | 1 | 15070.8502 | 18256.5168 | 19.9606 | 4 |
+| sba | 2 | 12466.4303 | 14416.2205 | 17.6402 | 4 |
+| sba | 3 | 13713.2247 | 14888.7747 | 19.3633 | 4 |
+| sba | 4 | 17769.9443 | 22427.1561 | 23.3864 | 3 |
+| ridge | 1 | 3021.6760 | 3798.9462 | 4.0021 | 4 |
+| ridge | 2 | 7101.3078 | 8140.5908 | 10.0484 | 4 |
+| ridge | 3 | 7475.5349 | 9994.8453 | 10.5556 | 4 |
+| ridge | 4 | 18192.2348 | 19333.9902 | 23.9422 | 3 |
 
 ## Series intermitentes vs regulares (nivel sku-sucursal)
 
 | model | subset | mae | rmse | wape | n |
 | --- | --- | --- | --- | --- | --- |
-| moving_average | intermitente | 9.9235 | 40.6989 | 96.6679 | 802 |
-| moving_average | regular | 18.3853 | 37.6638 | 24.9194 | 15163 |
-| ridge | intermitente | 7.0842 | 9.2240 | 775.5105 | 682 |
-| ridge | regular | 19.4639 | 33.9523 | 26.3814 | 15163 |
-| sba | intermitente | 10.7616 | 40.8786 | 104.8316 | 802 |
-| sba | regular | 22.8908 | 47.2606 | 31.0261 | 15163 |
-| seasonal_naive | intermitente | 9.8529 | 40.6074 | 95.9796 | 802 |
-| seasonal_naive | regular | 20.4286 | 41.1394 | 27.6889 | 15163 |
+| moving_average | intermitente | 9.9514 | 42.4873 | 96.3901 | 722 |
+| moving_average | regular | 16.3779 | 33.6041 | 21.2729 | 14138 |
+| ridge | intermitente | 4.9141 | 6.6151 | 522.4318 | 640 |
+| ridge | regular | 16.1814 | 29.4786 | 21.0177 | 14138 |
+| sba | intermitente | 10.8709 | 42.6780 | 105.2959 | 722 |
+| sba | regular | 21.5249 | 45.5350 | 27.9583 | 14138 |
+| seasonal_naive | intermitente | 9.8490 | 42.3886 | 95.3984 | 722 |
+| seasonal_naive | regular | 19.1255 | 39.1479 | 24.8417 | 14138 |
 
 ## Bandas
 
-Cuantiles de residuos de validación del método elegido (p10=-35.5536, p90=6.3919), sumados al pronóstico puntual y recortados en 0.
+Cuantiles de residuos de validación del método elegido (p10=-27.7827, p90=10.4747), sumados al pronóstico puntual y recortados en 0.
 
 ## Reproducción
 
 `uv run python -m glazedco.forecast` escribe este archivo, `reports/forecast_next_weeks.csv` y `reports/forecast_errors.csv` (residuos por serie). Pruebas: `uv run pytest tests/test_forecast.py -q`.
 
 API: [TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html), [Ridge](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Ridge.html).
+
+Tratamiento de anomalías en copia: conservar; verdad de validación sin ajuste.

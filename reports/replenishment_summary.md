@@ -4,22 +4,22 @@ Corte: 2026-09-30. Fuente: PostgreSQL vía glazedco.cleaning (SELECT). Presupues
 
 | Riesgo | Quiebre (filas) | Exceso (filas) |
 |---|---:|---:|
-| alto | 206 | 294 |
-| medio | 82 | 0 |
-| bajo | 1038 | 988 |
+| alto | 265 | 289 |
+| medio | 111 | 0 |
+| bajo | 996 | 1039 |
 | desconocido | 42 | 86 |
 
-- Series pronosticadas: **2169**; con recomendación: **1368**; sin fila de recomendación: **801**.
-- Desviación de categoría: **1037/1368 (75.80%)** de las filas de salida (incluye SS anulado por demanda cero).
+- Series pronosticadas: **2169**; con recomendación: **1414**; sin fila de recomendación: **755**.
+- Desviación de categoría: **1094/1414 (77.37%)** de las filas de salida (incluye SS anulado por demanda cero).
 - Filas con algún valor por defecto: **12**.
-- Cantidad total pedida: **15138 unidades**; pedidos positivos: **571**; cantidades cero: **797**.
-- Sin demanda esperada: **721** filas; apartadas por presupuesto: **0**.
+- Cantidad total pedida: **20932 unidades**; pedidos positivos: **611**; cantidades cero: **803**.
+- Sin demanda esperada: **741** filas; apartadas por presupuesto: **0**.
 
 ## Series sin recomendación
 
 - sin control de inventario: **705**.
-- stock cubre política; riesgos bajos, sin pedido: **63**.
 - sin producto maestro: **33**.
+- stock cubre política; riesgos bajos, sin pedido: **17**.
 
 ## Riesgos desconocidos
 
