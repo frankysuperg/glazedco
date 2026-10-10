@@ -12,3 +12,5 @@ __pycache__/
 
 # Dataset sintético: uso exclusivo del hackathon, no redistribuir.
 data/
+
+reports/*.csv
