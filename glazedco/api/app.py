@@ -45,6 +45,7 @@ def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | Non
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         state.listo, state.detalle = False, "Preparando datos y resultados."
+        state.tipo_error = None
         async with create_task_group() as tasks:
             tasks.start_soon(state.prepare, data)
             try:
@@ -69,7 +70,7 @@ def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | Non
 
     @app.get("/api/estado", response_model=ReadyState)
     async def status():
-        return ReadyState(listo=state.listo, detalle=state.detalle)
+        return ReadyState(listo=state.listo, detalle=state.detalle, tipo_error=state.tipo_error)
 
     @app.exception_handler(APIError)
     async def api_error(request: Request, exc: APIError) -> JSONResponse:

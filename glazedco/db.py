@@ -27,6 +27,17 @@ def load_environment() -> None:
         raise DatabaseError("No se pudo cargar .env; revisa acceso y codificación UTF-8.") from None
 
 
+def load_timeout_ms() -> int:
+    """Timeout exclusivo de la carga masiva; no modifica el pool ni SQLPolicy."""
+    load_environment()
+    raw = os.getenv("SQL_LOAD_TIMEOUT_MS", "300000").strip()
+    # No producir un ValueError que incluya el valor del entorno en su mensaje.
+    if not raw.isascii() or not raw.isdecimal() or len(raw) > 10 or not 1 <= int(raw) <= 2_147_483_647:
+        raise DatabaseError("SQL_LOAD_TIMEOUT_MS debe ser un entero positivo válido en milisegundos.")
+    value = int(raw)
+    return value
+
+
 def safe_error(exc: Exception) -> str:
     """Clasifica sin devolver texto del servidor, URL, usuario ni contraseña."""
     code = getattr(exc, "sqlstate", None)

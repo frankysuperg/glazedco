@@ -39,7 +39,7 @@ def test_startup_is_background_and_all_routes_fail_fast_until_ready(capsys):
     with TestClient(create_app(dashboard=data)) as client:
         try:
             assert client.get("/api/estado").json() == {
-                "listo": False, "detalle": "Preparando datos y resultados."}
+                "listo": False, "detalle": "Preparando datos y resultados.", "tipo_error": None}
             for route in ("/api/dashboard/resumen", "/api/margen", "/api/pronostico/semanal",
                           "/api/reabastecimiento", "/api/anomalias", "/api/alertas", "/api/sucursales"):
                 response = client.get(route)
@@ -51,6 +51,7 @@ def test_startup_is_background_and_all_routes_fail_fast_until_ready(capsys):
         finally:
             release.set()
         assert wait_finished(client)["listo"] is True
+        assert client.get("/api/estado").json()["tipo_error"] is None
         assert client.get("/api/dashboard/resumen").status_code == 200
     assert "Precalentamiento completado:" in capsys.readouterr().out
 
@@ -64,10 +65,14 @@ def test_failure_status_is_safe_and_console_has_duration(failure, expected, caps
     with TestClient(create_app(dashboard=data)) as client:
         state = wait_finished(client)
         assert state["listo"] is False and expected in state["detalle"]
+        assert state["tipo_error"] == "RuntimeError"
         assert "SECRET" not in json.dumps(state) and "private" not in json.dumps(state)
         assert client.get("/api/dashboard/resumen").status_code == 503
-    output = capsys.readouterr().out
-    assert "Precalentamiento fallido:" in output and "SECRET" not in output
+    output = capsys.readouterr()
+    assert "Precalentamiento fallido:" in output.out
+    assert "Traceback (most recent call last):" in output.err
+    assert "RuntimeError" in output.err and "SECRET" not in output.err + output.out
+    assert "private" not in output.err
 
 
 def test_warmup_caches_all_scopes_without_changing_results(monkeypatch):

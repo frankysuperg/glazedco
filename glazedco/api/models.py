@@ -146,6 +146,7 @@ class ErrorResponse(Model):
 class ReadyState(Model):
     listo: bool
     detalle: str
+    tipo_error: str | None = None
 
 
 class NotReadyResponse(ErrorResponse):

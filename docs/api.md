@@ -20,6 +20,27 @@ cálculos. Las demás rutas devuelven 503 sin esperar al trabajador, con
 la cabecera `Retry-After: 5`. El fallo de preparación permanece visible en
 el estado; corregir su causa y reiniciar. No se publican excepciones privadas.
 
+El estado incluye también `tipo_error`: `null` mientras prepara o cuando está
+listo, y el nombre de la excepción original si falla (por ejemplo,
+`QueryCanceled`, no solamente el wrapper `APIError`). El traceback completo
+de frames y causas se imprime en stderr del servidor, incluso los contextos
+ocultos por `from None`. Se redactan URLs, DSN, credenciales en asignaciones,
+tokens de autorización y valores secretos del entorno; se omiten variables
+locales y líneas de código fuente para no mostrar literales secretos. Los
+mensajes privados del traceback no forman parte de la respuesta HTTP.
+
+La carga masiva heredaba `statement_timeout=15000` del pool. Ahora `read_tables`
+aplica `SET LOCAL statement_timeout` antes de los cursores, dentro de la misma
+transacción READ ONLY con rollback. `SQL_LOAD_TIMEOUT_MS` vale 300000 por
+defecto y admite enteros de 1 a 2147483647 ms. Solo se usa para cargas masivas
+(API y comandos que reutilizan `read_tables`); no cambia las consultas, la
+limpieza, los cálculos, los tiempos de conexión ni el pool general. El asistente
+mantiene su política de 5000 ms y su propio SET LOCAL. Según
+[PostgreSQL](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-STATEMENT-TIMEOUT),
+el límite se aplica por sentencia ejecutada en el servidor, no a toda la
+duración del precalentamiento. Un fallo a los 43 s no demuestra por sí solo
+que la causa sea ese timeout: el diagnóstico permite comprobar la excepción.
+
 Se cargan las tablas limpias y los tres reportes, y se precalculan margen,
 pronóstico, recomendaciones y alertas tanto globales como para cada sucursal,
 con los mismos módulos y filtros existentes. No se consulta Gemini ni TrendsAPI

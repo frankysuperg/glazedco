@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 from psycopg import sql
 
-from glazedco.db import Database
+from glazedco.db import Database, load_timeout_ms
 from .config import Config
 from .core import Result
 from .pipeline import TABLES
@@ -14,7 +14,10 @@ from .pipeline import TABLES
 
 def read_tables(database: Database, config: Config) -> dict[str, pd.DataFrame]:
     tables: dict[str, pd.DataFrame] = {}
+    timeout_ms = load_timeout_ms()
     with database.transaction() as connection:
+        # Entero validado; SET LOCAL dura solo esta transacción de carga READ ONLY.
+        connection.execute(f"SET LOCAL statement_timeout = {timeout_ms}")
         for table in TABLES:
             # Orden físico explícito define «primera»; no es una fecha de negocio.
             statement = sql.SQL("SELECT * FROM {} ORDER BY tableoid, ctid").format(sql.Identifier("public", table))
