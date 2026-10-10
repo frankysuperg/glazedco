@@ -10,11 +10,22 @@ from api_helpers import ReadyClient as TestClient
 from test_api import MemorySource, block_services  # noqa: F401; bloqueo autouse de red/DB/SDK
 from glazedco.api.app import create_app
 from glazedco.api.data import Dashboard
+from glazedco.gemini import GeminiClient, GeminiConfig
 from glazedco.social.models import Hashtag, HashtagResult, SocialError
 from glazedco.strategies.config import Mapping, StrategyConfig
 from glazedco.strategies.facts import build_facts
 from glazedco.strategies.service import StrategyService
-from glazedco.strategies.validation import validate_strategies
+from glazedco.strategies.validation import ProposalBatch, validate_strategies
+
+
+@pytest.fixture(autouse=True)
+def no_retry_wait(monkeypatch):
+    monkeypatch.setattr("glazedco.strategies.service.time.sleep", Mock())
+
+
+@pytest.fixture
+def strict_validation(monkeypatch):
+    monkeypatch.setattr("glazedco.strategies.validation.STRICT_VALIDATION", True)
 
 
 def trends_result():
@@ -54,7 +65,8 @@ def test_unmapped_ignored_and_rank_preserved():
     assert fact["inventario"]["posicion_observada"] == 2000
     assert "volumen" not in fact and "crecimiento" not in fact
     assert "#desconocido" not in json.dumps(sent)
-    assert svc.gemini.generate.call_args.kwargs == {"profile": "creative"}
+    assert svc.gemini.generate.call_args.kwargs == {
+        "profile": "creative", "response_schema": ProposalBatch.model_json_schema()}
     assert len(result["estrategias"]) == 1
     assert result["descartes"] == []
     svc.gemini.generate.assert_called_once()
@@ -69,7 +81,7 @@ def test_unmapped_ignored_and_rank_preserved():
     {"evidencias": ["/hashtag", "/margen/inventado"]},
     {"hecho": 99}, {"hecho": True},
 ])
-def test_invalid_strategy_discarded_individually(change):
+def test_invalid_strategy_discarded_individually(change, strict_validation):
     svc = service()
     svc.gemini.generate.return_value = json.dumps({"estrategias": [proposal(**change), proposal()]})
     result = svc.generate("S1")
@@ -127,7 +139,7 @@ def test_existing_endpoint_scope(store, margin, forecast, stock):
 
 
 @pytest.mark.parametrize("failure", ["LLAVE_AUSENTE", "RED", "exception", "gemini"])
-def test_failures_are_503_without_internals(failure):
+def test_failures_return_demo_response_without_internals(failure):
     svc = service()
     if failure == "exception":
         svc.trends.get_trending_hashtags.side_effect = RuntimeError("SECRET")
@@ -137,8 +149,13 @@ def test_failures_are_503_without_internals(failure):
         svc.trends.get_trending_hashtags.return_value = HashtagResult(error=SocialError(codigo=failure, mensaje="SECRET"))
     with TestClient(create_app(dashboard=svc.data, strategy_service=svc)) as client:
         response = client.post("/api/tendencias/estrategias", json={"objetivo": "ventas"})
-    assert response.status_code == 503
-    assert "SECRET" not in response.text and "estrategias" not in response.json()
+    assert response.status_code == 200
+    assert "SECRET" not in response.text
+    assert "modo demo" in response.json()["aviso"]
+    if failure == "gemini":
+        assert response.json()["estrategias"][0]["origen"] == "respaldo"
+    else:
+        assert response.json()["estrategias"] == []
     if failure != "gemini":
         svc.gemini.generate.assert_not_called()
 
@@ -169,7 +186,7 @@ def test_invalid_json_is_not_published():
     ({"efecto_margen": "SECRET 60"}, "cifra_en_efecto"),
     ({"propuesta": "SECRET #ajeno"}, "hashtag_ajeno"),
 ])
-def test_rejection_codes_and_safe_logs(change, code, caplog):
+def test_rejection_codes_and_safe_logs(change, code, caplog, strict_validation):
     payload = {"hechos_tendencias": [{"hashtag": "#donas", "categoria": "donas",
                "margen": {"margen_bruto_monto": 60, "nulo": None}}]}
     item = proposal(evidencias=["/hashtag", "/margen/margen_bruto_monto"])
@@ -182,7 +199,7 @@ def test_rejection_codes_and_safe_logs(change, code, caplog):
 
 
 @pytest.mark.parametrize("repair", [True, False])
-def test_retry_is_bounded_and_reports_rejections(repair):
+def test_retry_is_bounded_and_reports_rejections(repair, strict_validation):
     svc = service()
     invalid = proposal(propuesta="SECRET 987654")
     valid = proposal(evidencias=["/hechos_tendencias/0/hashtag",
@@ -193,13 +210,14 @@ def test_retry_is_bounded_and_reports_rejections(repair):
         response = client.post("/api/tendencias/estrategias", json={"objetivo": "ventas"})
     result = response.json()
     assert response.status_code == 200
-    assert len(result["estrategias"]) == int(repair)
+    assert len(result["estrategias"]) == 1
+    assert result["estrategias"][0]["origen"] == ("gemini" if repair else "respaldo")
     assert result["descartes"] == [{"indice": 0, "motivo": "cifra_sin_origen"}] * (1 if repair else 2)
     assert result["estrategias_descartadas"] == len(result["descartes"])
     assert svc.gemini.generate.call_count == 2
     svc.trends.get_trending_hashtags.assert_called_once()
     for call in svc.gemini.generate.call_args_list:
-        assert call.kwargs == {"profile": "creative"}
+        assert call.kwargs == {"profile": "creative", "response_schema": ProposalBatch.model_json_schema()}
     retry = json.loads(svc.gemini.generate.call_args.args[0])
     assert retry["retroalimentacion"]["codigos_rechazo"] == ["cifra_sin_origen"]
     assert "SECRET" not in json.dumps(retry) and "987654" not in json.dumps(retry)
@@ -221,12 +239,12 @@ def test_retry_for_incomplete_coverage():
     svc.trends.get_trending_hashtags.assert_called_once()
 
 
-def test_absolute_references_cannot_borrow_another_fact():
+def test_absolute_references_cannot_borrow_another_fact(strict_validation):
     svc = service()
     svc.gemini.generate.return_value = json.dumps({"estrategias": [proposal(evidencias=[
         "/hechos_tendencias/1/hashtag", "/hechos_tendencias/0/margen/margen_bruto_monto"])]})
     result = svc.generate()
-    assert result["estrategias"] == []
+    assert result["estrategias"][0].origen == "respaldo"
     assert all(item.motivo == "referencia_inexistente" for item in result["descartes"])
 
 
@@ -237,7 +255,7 @@ def test_invalid_envelope_retry_remains_closed(response):
     svc = service()
     svc.gemini.generate.return_value = response
     result = svc.generate()
-    assert result["estrategias"] == []
+    assert result["estrategias"][0].origen == "respaldo"
     assert [item.model_dump() for item in result["descartes"]] == [
         {"indice": None, "motivo": "esquema_invalido"}] * 2
     assert svc.gemini.generate.call_count == 2
@@ -245,7 +263,7 @@ def test_invalid_envelope_retry_remains_closed(response):
 
 
 @pytest.mark.parametrize("text", ["Costo 2026", "Costo 999", "Costo ９９９", "Costo 1e99"])
-def test_numeric_rules_unchanged(text):
+def test_numeric_rules_unchanged(text, strict_validation):
     payload = {"hechos_tendencias": [{"hashtag": "#donas", "margen": {"monto": 60},
                                      "fecha": "2026-09-30", "no_citado": 999}]}
     item = proposal(propuesta=text, evidencias=["/hashtag", "/margen/monto", "/fecha"])
@@ -258,7 +276,8 @@ def test_empty_list_retries_once():
     svc = service()
     svc.gemini.generate.return_value = '{"estrategias": []}'
     result = svc.generate()
-    assert result["estrategias"] == result["descartes"] == []
+    assert result["estrategias"][0].origen == "respaldo"
+    assert result["descartes"] == []
     assert svc.gemini.generate.call_count == 2
     svc.trends.get_trending_hashtags.assert_called_once()
 
@@ -268,8 +287,42 @@ def test_retry_provider_failure_stays_safe():
     svc.gemini.generate.side_effect = ['{"estrategias": []}', RuntimeError("SECRET")]
     with TestClient(create_app(dashboard=svc.data, strategy_service=svc)) as client:
         response = client.post("/api/tendencias/estrategias", json={"objetivo": "ventas"})
-    assert response.status_code == 503
-    assert response.json()["error"]["codigo"] == "ESTRATEGIAS_NO_DISPONIBLES"
+    assert response.status_code == 200
+    assert response.json()["estrategias"][0]["origen"] == "respaldo"
     assert "SECRET" not in response.text
     assert svc.gemini.generate.call_count == 2
     svc.trends.get_trending_hashtags.assert_called_once()
+
+
+@pytest.mark.parametrize("malformed", [
+    "```json\n{\"estrategias\": []}\n```",
+    json.dumps({"estrategias": [proposal(hecho="0")]}),
+    json.dumps({"estrategias": [proposal(tipo="promoción")]}),
+    json.dumps({"estrategias": [proposal(evidencias={"hashtag": "/hashtag"})]}),
+    json.dumps({"estrategias": [proposal(hashtag="#donas")]}),
+    json.dumps({"estrategias": [{"hecho": 0}]}),
+])
+def test_schema_failure_repaired_through_real_adapter_and_endpoint(malformed):
+    from types import SimpleNamespace
+
+    svc = service()
+    sdk = Mock()
+    valid = json.dumps({"estrategias": [proposal()]})
+    sdk.models.generate_content.side_effect = [SimpleNamespace(text=malformed), SimpleNamespace(text=valid)]
+    with GeminiClient(GeminiConfig("llave-ficticia", "modelo-ficticio"), sdk_client=sdk) as client:
+        svc.gemini = client
+        with TestClient(create_app(dashboard=svc.data, strategy_service=svc)) as api:
+            response = api.post("/api/tendencias/estrategias", json={"objetivo": "ventas"})
+    result = response.json()
+    assert response.status_code == 200
+    assert len(result["estrategias"]) == 1
+    assert result["descartes"][0]["motivo"] == "esquema_invalido"
+    assert sdk.models.generate_content.call_count == 2
+    for call in sdk.models.generate_content.call_args_list:
+        config = call.kwargs["config"]
+        assert config.response_mime_type == "application/json"
+        assert config.response_json_schema == ProposalBatch.model_json_schema()
+    feedback = json.loads(sdk.models.generate_content.call_args.kwargs["contents"])["retroalimentacion"]
+    assert feedback["codigos_rechazo"] == ["esquema_invalido"]
+    svc.trends.get_trending_hashtags.assert_called_once()
+    sdk.close.assert_called_once()

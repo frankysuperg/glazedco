@@ -1,6 +1,7 @@
 """Adaptador del SDK oficial google-genai con perfiles y puente MCP opcional."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Literal, Self
 
@@ -31,18 +32,32 @@ class GeminiClient:
         self.config = config if config is not None else load_config()
         self._sdk = sdk_client if sdk_client is not None else genai.Client(api_key=self.config.api_key)
 
-    def generate(self, contents: str, *, profile: Profile = "analysis") -> str:
+    def generate(self, contents: str, *, profile: Profile = "analysis",
+                 response_schema: dict[str, object] | None = None) -> str:
         if profile not in TEMPERATURES:
             raise ValueError("Perfil no admitido: usa analysis, sql o creative.")
         instruction = (PROMPTS / f"{profile}.txt").read_text(encoding="utf-8")
+        config = types.GenerateContentConfig(
+            temperature=TEMPERATURES[profile], system_instruction=instruction,
+        )
+        if response_schema is not None:
+            config.response_mime_type = "application/json"
+            config.response_json_schema = response_schema
         try:
             response = self._sdk.models.generate_content(
                 model=self.config.model, contents=contents,
-                config=types.GenerateContentConfig(
-                    temperature=TEMPERATURES[profile], system_instruction=instruction,
-                ),
+                config=config,
             )
-        except errors.APIError:
+        except errors.APIError as exc:
+            # Nunca registrar message, respuesta, traceback ni credenciales del SDK.
+            code = exc.code if isinstance(exc.code, int) else None
+            statuses = {"INVALID_ARGUMENT", "UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND",
+                        "RESOURCE_EXHAUSTED", "INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED",
+                        "FAILED_PRECONDITION", "UNKNOWN", "CANCELLED", "OUT_OF_RANGE",
+                        "UNIMPLEMENTED", "DATA_LOSS", "ALREADY_EXISTS", "ABORTED"}
+            status = exc.status if isinstance(exc.status, str) and exc.status in statuses else "UNKNOWN"
+            logging.getLogger("uvicorn.error").warning(
+                "Gemini APIError tipo=%s code=%s status=%s", type(exc).__name__, code, status)
             raise GeminiError("Gemini rechazó la solicitud; revisa llave, modelo, permisos o cuota.") from None
         if not response.text or not response.text.strip():
             raise GeminiError("Gemini no devolvió texto; la respuesta puede haber sido bloqueada o estar vacía.")

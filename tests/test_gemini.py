@@ -45,6 +45,32 @@ def test_perfiles_envian_parametros_oficiales_y_politica(profile, temperature, s
     for text in ("solo los datos entregados", "no tengo ese dato", "Nunca inventes métricas, resultados de consultas ni fuentes"):
         assert text in prompt
     assert kwargs["config"].tools is None
+    assert kwargs["config"].response_mime_type is None
+    assert kwargs["config"].response_json_schema is None
+
+
+def test_structured_generation_sends_shared_contract_to_sdk(sdk):
+    from glazedco.strategies.validation import Proposal, ProposalBatch
+
+    schema = ProposalBatch.model_json_schema()
+    sdk.models.generate_content.return_value.text = '{"estrategias": []}'
+    client = GeminiClient(GeminiConfig("llave-ficticia", "modelo-ficticio"), sdk_client=sdk)
+    assert client.generate('{"hechos_tendencias": []}', profile="creative",
+                           response_schema=schema) == '{"estrategias": []}'
+    config = sdk.models.generate_content.call_args.kwargs["config"]
+    assert config.response_mime_type == "application/json"
+    assert config.response_json_schema == schema
+    assert config.response_schema is None
+    assert config.temperature == 0.9
+    assert schema["required"] == ["estrategias"]
+    assert schema["additionalProperties"] is False
+    assert schema["properties"]["estrategias"]["maxItems"] == 5
+    assert schema["$defs"]["Proposal"] == Proposal.model_json_schema()
+    proposal = schema["$defs"]["Proposal"]
+    assert set(proposal["required"]) == {"hecho", "tipo", "propuesta", "efecto_margen", "evidencias"}
+    assert proposal["properties"]["hecho"]["type"] == "integer"
+    assert proposal["properties"]["evidencias"]["items"]["type"] == "string"
+    assert proposal["additionalProperties"] is False
 
 
 @pytest.mark.parametrize("key", [None, "", "   "])

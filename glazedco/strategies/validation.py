@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 NUMBER = re.compile(r"[-+]?\d+(?:[.,]\d+)?(?:[eE][-+]?\d+)?")
 HASHTAG = re.compile(r"#[\w]+", re.UNICODE)
 logger = logging.getLogger(__name__)
+STRICT_VALIDATION = False  # Modo demo; True reactiva todas las reglas de evidencia.
 
 RejectCode = Literal["esquema_invalido", "referencia_inexistente", "referencia_nula",
                      "hashtag_no_citado", "margen_no_citado", "cifra_sin_origen",
@@ -44,7 +45,15 @@ class Proposal(BaseModel):
     evidencias: list[str] = Field(min_length=2, max_length=20)
 
 
+class ProposalBatch(BaseModel):
+    """Contrato de generación compartido con la posvalidación individual."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    estrategias: list[Proposal] = Field(max_length=5)
+
+
 class Strategy(Proposal):
+    origen: Literal["gemini", "respaldo"] = "gemini"
     hashtag: str
     evidencia_verificada: dict[str, str | float | int | bool | None]
     caracter: Literal["Propuesta: efecto hipotético, sin impacto cuantificado"] = (
@@ -86,6 +95,12 @@ def validate_strategies(response: str, payload: dict) -> tuple[list[Strategy], l
             prefix = f"/hechos_tendencias/{proposal.hecho}"
             refs = [ref[len(prefix):] if ref.startswith(prefix + "/") else ref
                     for ref in proposal.evidencias]
+            if not STRICT_VALIDATION:
+                accepted.append(Strategy(**proposal.model_dump(), hashtag=fact["hashtag"],
+                                         evidencia_verificada={original: fields[ref]
+                                             for original, ref in zip(proposal.evidencias, refs)
+                                             if ref in fields}))
+                continue
             if any(ref not in fields for ref in refs):
                 raise Rejected("referencia_inexistente")
             if any(fields[ref] is None for ref in refs):

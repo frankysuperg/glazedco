@@ -1,5 +1,12 @@
 # Backend del dashboard
 
+Modo demo de estrategias: las respuestas incluyen el aviso
+`Propuestas sin validación estricta (modo demo)` y cada estrategia indica
+`origen: gemini` o `origen: respaldo`. Si Gemini falla o no entrega propuestas,
+el endpoint usa campañas de plantilla sobre los hechos calculados. Si falla
+TrendsAPI devuelve 200 con lista vacía y aviso; se conservan las claves del
+contrato. El 503 por falta de datos internos o API aún no lista sigue vigente.
+
 FastAPI expone los módulos existentes y un dashboard HTML autocontenido, sin
 cambios de reglas de negocio. Se consultó la documentación vigente de
 [modelos de respuesta](https://fastapi.tiangolo.com/tutorial/response-model/) y
@@ -315,6 +322,9 @@ Solo se expone el primer código de rechazo por propuesta: `esquema_invalido`,
 `referencia_inexistente`, `referencia_nula`, `hashtag_no_citado`, `margen_no_citado`,
 `hashtag_ajeno`, `cifra_en_efecto` o `cifra_sin_origen`. Los mismos códigos se
 registran en consola sin contenido del modelo ni datos sensibles.
+La generación usa salida JSON estructurada con el esquema de los campos de
+propuesta compartido con el validador (prompt creativo v3), en ambos intentos.
+No cambia el contrato HTTP ni añade consultas externas.
 Si falta cobertura de hashtags relacionados (máximo cinco) o todas las
 propuestas fallan, el servidor hace un único reintento creative con los mismos
 hechos y códigos como retroalimentación; no vuelve a consultar TrendsAPI.

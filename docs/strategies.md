@@ -1,5 +1,16 @@
 # Estrategias con evidencia
 
+> Modo demo activo: `validation.STRICT_VALIDATION = False`. Se conserva el
+> esquema de Proposal y el índice de hecho; se omiten las reglas semánticas
+> descritas abajo. Referencias ausentes se omiten de la evidencia resuelta.
+> Sin propuestas de Gemini se usan campañas de plantilla (`origen: respaldo`),
+> una por hashtag, hasta cinco, usando categoría/product_name del catálogo y
+> margen disponible, sin inventar interés ni variaciones. Un fallo del segundo
+> intento conserva las propuestas previas; antes del reintento se esperan ocho
+> segundos. Fallos de TrendsAPI devuelven 200 vacío con aviso. Los fallos de
+> cálculo de hechos siguen devolviendo 503. Reactivar la constante restaura la
+> posvalidación estricta; no desactiva el mecanismo de respaldo.
+
 `POST /api/tendencias/estrategias` conserva el cuerpo `{"objetivo": "..."}` y
 el filtro opcional `sucursal`; omitirlo usa Todas las sucursales. El texto libre
 de objetivo se conserva por compatibilidad, pero no se pasa a Gemini: en esta
@@ -51,7 +62,15 @@ inválido se descarta; errores de Gemini producen 503 ESTRATEGIAS_NO_DISPONIBLES
 Esta comprobación de pertenencia no demuestra causalidad ni garantiza resultados
 comerciales; las propuestas requieren evaluación antes de ejecutarse.
 
-### Diagnóstico y reintento (prompt creativo v2)
+### Diagnóstico y reintento (prompt creativo v3)
+
+La generación solicita `application/json` y envía al SDK `response_json_schema`,
+derivado de `ProposalBatch` y del mismo `Proposal` usado por el validador.
+El contrato exige la envoltura `estrategias`, hasta cinco elementos, los cinco
+campos obligatorios, sus tipos y los valores permitidos de `tipo`, sin campos
+adicionales. Se usa en ambos intentos; ya no depende únicamente del prompt.
+Los demás usos de Gemini conservan su formato de salida. El proveedor debe
+admitir salida estructurada; se conserva el 503 si rechaza la petición.
 
 `descartes` es una lista de `{ "indice": 0, "motivo": "referencia_inexistente" }`.
 El índice parte de cero dentro de la lista del intento; es `null` si el JSON o
@@ -81,8 +100,10 @@ rutas exclusivamente dentro del hecho indicado; conserva las rutas relativas
 anteriores por compatibilidad. No cambia los criterios de evidencia ni cifras.
 El efecto esperado no admite dígitos. El ejemplo ficticio del prompt solo
 enseña formato: no se agrega a los hechos ni se publica como respaldo.
-El antiguo contador ocultaba la causa de rechazo; sin la respuesta original
-no puede atribuirse el caso observado a una regla concreta.
+El caso reportado produjo `esquema_invalido`: se identificó que el cliente
+pedía formato solo mediante texto y no enviaba un esquema al proveedor.
+Ese código también cubre JSON inválido y no identifica por sí solo el campo
+incorrecto ni demuestra que las cifras hubieran pasado las reglas posteriores.
 
 Verificación local sin servicios:
 `uv run --offline --no-sync pytest tests/test_strategies.py tests/test_api.py tests/test_gemini.py tests/test_social.py -q --tb=short`
