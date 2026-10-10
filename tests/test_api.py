@@ -6,7 +6,7 @@ import socket
 
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from api_helpers import ReadyClient as TestClient
 from sqlglot import exp, parse_one
 from sqlglot.optimizer.scope import traverse_scope
 
@@ -141,14 +141,15 @@ def test_filter_applied_before_replenishment_computation(source, monkeypatch):
     original = module.recommend_replenishment
     seen = []
     def observe(**kwargs):
+        stores = set(kwargs["forecast"].store_id)
         for name in ("forecast", "errors", "inventory", "purchase_orders", "observed_demand"):
-            assert set(kwargs[name].store_id) <= {"S1"}
-        seen.append(True)
+            assert set(kwargs[name].store_id) <= stores
+        seen.append(stores)
         return original(**kwargs)
     monkeypatch.setattr(module, "recommend_replenishment", observe)
     with client_for(source) as client:
         assert client.get("/api/reabastecimiento?sucursal=S1").status_code == 200
-    assert seen
+    assert {"S1"} in seen and {"S2"} in seen and {"S1", "S2"} in seen
 
 
 def test_search_is_text_not_regex_and_case_insensitive(source):
@@ -274,8 +275,8 @@ def test_filtered_assistant_endpoint_revalidates_and_executes_scoped_sql(source)
 
 def test_generic_error_does_not_reveal_exception(source):
     dashboard = Dashboard(source)
-    dashboard.margin = MagicMock(side_effect=ValueError("password=SECRET path=INTERNAL"))
     with TestClient(create_app(dashboard=dashboard), raise_server_exceptions=False) as client:
+        dashboard.margin = MagicMock(side_effect=ValueError("password=SECRET path=INTERNAL"))
         result = client.get("/api/margen")
     assert result.status_code == 500
     assert result.json() == {"error": {"codigo": "ERROR_INTERNO", "mensaje": "No se pudo completar la solicitud."}}
@@ -284,5 +285,5 @@ def test_generic_error_does_not_reveal_exception(source):
 def test_openapi_declares_models(source):
     with client_for(source) as client:
         schema = client.get("/openapi.json").json()
-    assert len(schema["paths"]) == 9
+    assert len(schema["paths"]) == 10
     assert schema["paths"]["/api/dashboard/resumen"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]["$ref"].endswith("Summary")

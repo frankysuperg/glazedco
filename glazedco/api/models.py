@@ -141,3 +141,12 @@ class ErrorDetail(Model):
 
 class ErrorResponse(Model):
     error: ErrorDetail
+
+
+class ReadyState(Model):
+    listo: bool
+    detalle: str
+
+
+class NotReadyResponse(ErrorResponse):
+    reintentar_despues: int

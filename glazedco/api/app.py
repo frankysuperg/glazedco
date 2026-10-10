@@ -1,8 +1,9 @@
 """FastAPI: rutas de lectura y adaptadores de los módulos existentes."""
 
 from typing import Annotated
+from contextlib import asynccontextmanager
 
-from anyio import to_thread
+from anyio import create_task_group, to_thread
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -11,10 +12,12 @@ from starlette.exceptions import HTTPException
 from .assistant import Assistant, LiveAssistant
 from .data import Dashboard, records
 from .errors import APIError
+from .startup import StartupState
 from glazedco.strategies.service import StrategyService
 from .models import (
     Alert, Anomaly, Answer, ErrorDetail, ErrorResponse, ForecastResponse, MarginResponse,
     Page, Question, Replenishment, Scope, Store, StrategyRequest, StrategyResponse, Summary,
+    ReadyState, NotReadyResponse,
 )
 
 Branch = Annotated[str | None, Query(min_length=1, max_length=100, description="Omitir = Todas las sucursales")]
@@ -37,8 +40,36 @@ def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | Non
     data = dashboard or Dashboard()
     assistant_service = assistant or LiveAssistant()
     strategy_service = strategy_service or StrategyService(data)
+    state = StartupState()
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        state.listo, state.detalle = False, "Preparando datos y resultados."
+        async with create_task_group() as tasks:
+            tasks.start_soon(state.prepare, data)
+            try:
+                yield
+            finally:
+                # Esperar al trabajador evita dejar lecturas o escrituras huérfanas al cerrar.
+                state.listo = False
+        state.listo, state.detalle = False, "Aplicación detenida."
+
     app = FastAPI(title="Glazed Co. Dashboard API", version="0.1.0", debug=False,
-                  responses={code: {"model": ErrorResponse} for code in (404, 422, 500, 503)})
+                  lifespan=lifespan,
+                  responses={**{code: {"model": ErrorResponse} for code in (404, 422, 500)},
+                             503: {"model": ErrorResponse | NotReadyResponse}})
+
+    @app.middleware("http")
+    async def readiness(request: Request, call_next):
+        if request.url.path != "/api/estado" and not state.listo:
+            result = NotReadyResponse(error=ErrorDetail(codigo="API_NO_LISTA", mensaje=state.detalle),
+                                      reintentar_despues=5)
+            return JSONResponse(status_code=503, content=result.model_dump(), headers={"Retry-After": "5"})
+        return await call_next(request)
+
+    @app.get("/api/estado", response_model=ReadyState)
+    async def status():
+        return ReadyState(listo=state.listo, detalle=state.detalle)
 
     @app.exception_handler(APIError)
     async def api_error(request: Request, exc: APIError) -> JSONResponse:

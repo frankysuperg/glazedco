@@ -5,7 +5,7 @@ import json
 from unittest.mock import Mock
 
 import pytest
-from fastapi.testclient import TestClient
+from api_helpers import ReadyClient as TestClient
 
 from test_api import MemorySource, block_services  # noqa: F401; bloqueo autouse de red/DB/SDK
 from glazedco.api.app import create_app

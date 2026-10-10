@@ -9,6 +9,25 @@ Arranque local: `uv run uvicorn glazedco.api.app:app --host 127.0.0.1 --port 800
 OpenAPI en `/openapi.json`, documentación interactiva en `/docs`.
 La aplicación no consulta PostgreSQL ni Gemini al importarse.
 
+## Arranque y disponibilidad
+
+El [lifespan de FastAPI](https://fastapi.tiangolo.com/advanced/events/) lanza
+el precalentamiento en un trabajador en segundo plano y cede inmediatamente
+el control al servidor. `GET /api/estado` devuelve `{"listo": false, "detalle": "..."}`
+mientras trabaja y `listo: true` únicamente cuando se completaron todos los
+cálculos. Las demás rutas devuelven 503 sin esperar al trabajador, con
+`error.codigo: API_NO_LISTA`, un mensaje seguro, `reintentar_despues: 5` y
+la cabecera `Retry-After: 5`. El fallo de preparación permanece visible en
+el estado; corregir su causa y reiniciar. No se publican excepciones privadas.
+
+Se cargan las tablas limpias y los tres reportes, y se precalculan margen,
+pronóstico, recomendaciones y alertas tanto globales como para cada sucursal,
+con los mismos módulos y filtros existentes. No se consulta Gemini ni TrendsAPI
+al arrancar. El tiempo total (éxito o fallo) se imprime en consola. Cada proceso
+tiene su propia memoria; el cierre ordenado espera al trabajador para no dejar
+lecturas o escrituras pendientes. La preparación todavía necesita tiempo,
+pero las peticiones no lo esperan ni disparan el cálculo.
+
 ## Rutas
 
 Todas admiten `?sucursal=S001`; omitir el parámetro devuelve
@@ -17,6 +36,7 @@ Los identificadores se toman del catálogo limpio, no se interpretan como númer
 
 | Método | Ruta | Respuesta |
 |---|---|---|
+| GET | `/api/estado` | Disponibilidad y detalle seguro del precalentamiento; sin filtro de sucursal |
 | GET | `/api/dashboard/resumen` | Margen, pronóstico agregado y conteo de alertas del corte |
 | GET | `/api/margen` | Monto/porcentaje separados, cobertura y exclusiones |
 | GET | `/api/pronostico/semanal` | Suma por semana de los pronósticos publicados |
@@ -34,8 +54,8 @@ Todas las respuestas tienen esquema Pydantic; no se serializan objetos internos.
 
 ## Datos y cálculo
 
-El adaptador reutiliza `forecast.load_clean`: caché Parquet existente en
-`data/clean` o lectura SELECT y limpieza existentes. Carga los CSV
+El adaptador reutiliza las mismas funciones `read_tables` y `clean_all`: caché
+Parquet existente en `data/clean` o lectura SELECT y limpieza existentes. Carga los CSV
 `forecast_next_weeks.csv`, `forecast_errors.csv` y `anomalies.csv` de `reports`.
 No entrena modelos por solicitud ni inventa resultados si falta un archivo.
 El margen se recalcula con `aggregate_margin` después del filtro: conserva
@@ -52,10 +72,39 @@ conservan los modelos ya publicados; no se vuelven a entrenar al filtrar.
 El presupuesto y los respaldos se aplican por el módulo al conjunto filtrado,
 por lo que una recomendación filtrada puede diferir de su fila en la vista global.
 
-Los datos y resultados se guardan en memoria al primer uso, con bloqueo para
-evitar cargas duplicadas; reiniciar el proceso después de publicar nuevos
+Los datos y resultados se guardan en memoria durante el precalentamiento;
+reiniciar el proceso después de publicar nuevos
 archivos. El despliegue debe usar caché y reportes del mismo corte. No existe
 un manifiesto común que permita garantizar automáticamente esa consistencia.
+
+`API_CLEAN_CACHE_MAX_AGE_SECONDS` controla la antigüedad máxima del Parquet:
+86400 segundos por defecto; 0 fuerza recarga en cada arranque. Se exige que las
+13 tablas estén presentes, legibles y dentro del plazo. Se acepta la caché
+existente de `glazedco.cleaning --cache`. Tras una carga desde PostgreSQL se
+guardan los Parquet y un manifiesto local con configuración y firmas de los
+archivos; este detecta cambios o escrituras incompletas. Se preservan tipos e
+índices y no se modifican tablas en PostgreSQL. La edad se comprueba al arrancar,
+no se refresca la memoria mientras hay solicitudes. `data/` sigue ignorado por Git.
+
+## Verificación del cambio de arranque
+
+Antes de editar se guardó `data/verification/resumen_before.json`. La consulta
+real falló con 503 durante la lectura de PostgreSQL en dos intentos, por lo que
+no se obtuvo una referencia real con cifras. Después se guardaron
+`resumen_after.json` y `estado_after.json`: el lifespan devolvió el control en
+0,317 s; el resumen respondió 503 inmediatamente y el precalentamiento informó
+fallo de carga a los 101,52 s. Los JSON de error difieren por el nuevo contrato
+API_NO_LISTA y reintentar_despues, no por un cambio demostrado de cifras.
+
+Se guardaron además `resumen_fixture_before.json` y `resumen_fixture_after.json`
+con datos de prueba: igualdad exacta del JSON para Todas las sucursales, S1 y S2.
+Estos archivos locales están bajo `data/` y no se versionan. No se arrancó un
+servidor de red; todos los clientes en proceso se cerraron. Queda pendiente
+comparar un resumen real exitoso cuando PostgreSQL pueda completar la lectura.
+
+Pruebas de disponibilidad, 503 inmediato, recuperación, errores sin secretos,
+caché nueva/existente/vencida/incompleta/corrupta y regresiones de endpoints:
+`uv run --offline --no-sync pytest tests/test_api_startup.py tests/test_api.py tests/test_strategies.py -q --tb=short`
 
 ## Alertas y limitación existente
 

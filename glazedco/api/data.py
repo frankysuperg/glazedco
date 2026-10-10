@@ -8,14 +8,13 @@ from typing import Protocol
 import pandas as pd
 
 from glazedco.cleaning.config import load_config as cleaning_config
-from glazedco.cleaning.pipeline import TABLES
-from glazedco.forecast.__main__ import load_clean
 from glazedco.forecast.prepare import weekly_demand
 from glazedco.metrics import aggregate_margin
 from glazedco.replenishment.config import ReplenishmentConfig, load_config
 from glazedco.replenishment.demand import observed_weekly_means
 from glazedco.replenishment.recommend import OUTPUT_COLUMNS, recommend_replenishment
 from .errors import APIError
+from .cache import load_tables, max_cache_age
 from .models import Alert, ForecastResponse, Margin, Scope, Week
 
 
@@ -26,11 +25,13 @@ class DataSource(Protocol):
 
 class LocalSource:
     """Caché limpia existente o lectura/limpieza existente; CSV de modelos publicados."""
-    def __init__(self, root: Path | None = None) -> None:
+    def __init__(self, root: Path | None = None, *, cache_max_age_seconds: float | None = None) -> None:
         self.root = root or Path(__file__).resolve().parents[2]
+        self.cache_max_age_seconds = cache_max_age_seconds
 
     def tables(self) -> dict[str, pd.DataFrame]:
-        return load_clean(needed=TABLES, cache_dir=self.root / "data" / "clean")[0]
+        age = max_cache_age() if self.cache_max_age_seconds is None else self.cache_max_age_seconds
+        return load_tables(self.root / "data" / "clean", age)
 
     def report(self, name: str) -> pd.DataFrame:
         # name es interno, no una ruta suministrada por HTTP.
@@ -51,7 +52,20 @@ class Dashboard:
         self._tables: dict[str, pd.DataFrame] | None = None
         self._reports: dict[str, pd.DataFrame] = {}
         self._recommendations: dict[str | None, pd.DataFrame] = {}
+        self._margins: dict[str | None, Margin] = {}
+        self._forecasts: dict[str | None, ForecastResponse] = {}
+        self._alerts: dict[str | None, list[Alert]] = {}
         self._lock = RLock()
+
+    def warmup(self) -> None:
+        """Mismos cálculos por alcance; ningún proveedor de IA se invoca al arrancar."""
+        tables = self.tables()
+        for name in ("forecast", "errors", "anomalies"):
+            self.report(name)
+        for store in [None, *tables["stores"].store_id.dropna().unique().tolist()]:
+            self._margins[store] = self.margin(store)
+            self._forecasts[store] = self.forecast(store)
+            self._alerts[store] = self.alerts(store)
 
     def tables(self) -> dict[str, pd.DataFrame]:
         with self._lock:
@@ -85,11 +99,15 @@ class Dashboard:
         return frame.loc[frame.store_id.eq(store)].copy() if store is not None and "store_id" in frame else frame.copy()
 
     def margin(self, store: str | None) -> Margin:
+        if store in self._margins:
+            return self._margins[store].model_copy(deep=True)
         self.scope(store)
         sales = self.select(self.tables()["sales_daily"], store)
         return Margin.model_validate(records(aggregate_margin(sales))[0])
 
     def forecast(self, store: str | None) -> ForecastResponse:
+        if store in self._forecasts:
+            return self._forecasts[store].model_copy(deep=True)
         scope = self.scope(store)
         frame = self.select(self.report("forecast"), store)
         weeks: list[Week] = []
@@ -108,7 +126,8 @@ class Dashboard:
                 tables = {name: self.select(frame, store) for name, frame in self.tables().items()}
                 forecast = self.select(self.report("forecast"), store)
                 if forecast.empty:
-                    return pd.DataFrame(columns=OUTPUT_COLUMNS)
+                    self._recommendations[store] = pd.DataFrame(columns=OUTPUT_COLUMNS)
+                    return self._recommendations[store].copy()
                 history = {name: tables[name].loc[pd.to_datetime(tables[name].date).le(self.config.as_of_date)]
                            for name in ("sales_daily", "inventory_daily")}
                 panel = weekly_demand(history["sales_daily"], history["inventory_daily"],
@@ -123,6 +142,8 @@ class Dashboard:
             return self._recommendations[store].copy()
 
     def alerts(self, store: str | None) -> list[Alert]:
+        if store in self._alerts:
+            return [alert.model_copy(deep=True) for alert in self._alerts[store]]
         result: list[Alert] = []
         severity = {"alto": "alta", "medio": "media", "desconocido": "desconocida"}
         for row in self.recommendations(store).itertuples(index=False):
