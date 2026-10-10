@@ -11,3 +11,8 @@ SDK oficial: `google-genai`. Se revisó la [documentación oficial de Python](ht
 El cliente admite `with GeminiClient() as cliente:` para liberar recursos. Las pruebas inyectan un SDK simulado y bloquean conexiones de sockets; no requieren llave real, modelo real ni acceso a Gemini.
 
 Verificar: `uv run --no-sync pytest tests/test_gemini.py -q`.
+
+Puente MCP opcional: `await cliente.generate_with_mcp(texto, session=mcp.session)`
+en un contexto `async with GeminiClient()`. Expone las herramientas registradas
+al function calling automático del SDK; ver [integración social](social.md).
+`generate()` y el flujo SQL verificado conservan su comportamiento anterior.

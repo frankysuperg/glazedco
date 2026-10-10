@@ -1,4 +1,4 @@
-"""Adaptador del SDK oficial google-genai, sin consultas ni cálculos de negocio."""
+"""Adaptador del SDK oficial google-genai con perfiles y puente MCP opcional."""
 
 import json
 from pathlib import Path
@@ -6,6 +6,7 @@ from typing import Literal, Self
 
 from google import genai
 from google.genai import errors, types
+from mcp import ClientSession
 
 from .config import GeminiConfig, load_config
 
@@ -50,8 +51,43 @@ class GeminiClient:
     def close(self) -> None:
         self._sdk.close()
 
+    async def generate_with_mcp(self, contents: str, *, session: ClientSession,
+                                profile: Profile = "analysis") -> str:
+        """Function calling automático mediante una sesión MCP ya conectada.
+
+        Expone las herramientas registradas en esa sesión. El llamador conserva
+        el contexto de conexión; este método no reemplaza el flujo SQL verificado.
+        """
+        if profile not in TEMPERATURES:
+            raise ValueError("Perfil no admitido.")
+        instruction = (PROMPTS / f"{profile}.txt").read_text(encoding="utf-8")
+        try:
+            response = await self._sdk.aio.models.generate_content(
+                model=self.config.model, contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=instruction + "\nUsa las herramientas para obtener datos. "
+                    "Comunica sus errores y limitaciones; no inventes métricas ausentes.",
+                    temperature=TEMPERATURES[profile], tools=[session],
+                    automatic_function_calling=types.AutomaticFunctionCallingConfig(maximum_remote_calls=3),
+                ),
+            )
+        except Exception:
+            raise GeminiError("No se pudo completar la consulta con herramientas MCP.") from None
+        if not response.text or not response.text.strip():
+            raise GeminiError("Gemini no devolvió una respuesta con herramientas MCP.")
+        return response.text.strip()
+
     def __enter__(self) -> Self:
         return self
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        try:
+            await self._sdk.aio.aclose()
+        finally:
+            self.close()
 
     def __exit__(self, *args: object) -> None:
         self.close()

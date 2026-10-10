@@ -197,7 +197,7 @@ def test_mcp_contract_in_memory(setup):
     async def run():
         async with Client(create_server(service=service)) as client:
             tools = await client.list_tools()
-            assert {tool.name for tool in tools} == {"get_schema", "run_readonly_sql"}
+            assert {tool.name for tool in tools} == {"get_schema", "run_readonly_sql", "get_trending_hashtags"}
             for tool in tools:
                 assert tool.annotations.readOnlyHint is True
             schema = (await client.call_tool("get_schema", {})).data
