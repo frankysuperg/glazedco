@@ -1,0 +1,17 @@
+# Parámetros de política de reabastecimiento (no se inventan en el código).
+z = 1.65
+cobertura_objetivo_dias = 14.0
+umbral_exceso_semanas = 6.0
+presupuesto = 50000.0
+min_residuos = 8
+as_of_date = "2026-09-30"
+forecast_start_date = "2026-10-05"
+
+# Valores por defecto explícitos cuando falta el dato; se marcan en motivo.
+default_case_size = 1
+default_lead_time_days = 7.0
+default_fill_rate = 1.0
+default_desviacion = 0.0
+
+# Columna de categoría en products; si no existe se usa is_perishable.
+category_column = "category"

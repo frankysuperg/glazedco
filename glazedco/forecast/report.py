@@ -110,7 +110,7 @@ def render_eval_report(panel: pd.DataFrame, result: EvalResult, *, source: str) 
         "",
         "## Reproducción",
         "",
-        "`uv run python -m glazedco.forecast` escribe este archivo. Pruebas: `uv run pytest tests/test_forecast.py -q`.",
+        "`uv run python -m glazedco.forecast` escribe este archivo, `reports/forecast_next_weeks.csv` y `reports/forecast_errors.csv` (residuos por serie). Pruebas: `uv run pytest tests/test_forecast.py -q`.",
         "",
         "API: [TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html), [Ridge](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.Ridge.html).",
         "",

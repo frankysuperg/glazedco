@@ -9,6 +9,7 @@ from glazedco.cleaning import clean_all, load_config
 from glazedco.cleaning.io import read_tables
 from glazedco.db import Database, DatabaseError
 
+from .errors import series_forecast_errors
 from .evaluate import evaluate_forecasts, forecast_future
 from .prepare import weekly_demand
 from .report import render_eval_report
@@ -57,8 +58,12 @@ def main() -> int:
     future = forecast_future(panel, result, horizon=args.horizon)
     preview = root / "reports" / "forecast_next_weeks.csv"
     future.to_csv(preview, index=False)
+    errors = series_forecast_errors(result)
+    errors_path = root / "reports" / "forecast_errors.csv"
+    errors.to_csv(errors_path, index=False)
     print(f"Reporte: {output}")
     print(f"Pronóstico puntual: {preview} ({len(future)} filas).")
+    print(f"Residuos por serie: {errors_path} ({len(errors)} filas).")
     print(f"Ridge retenido: {result.selection.keep_ridge}; baseline: {result.selection.best_baseline}.")
     return 0
 
