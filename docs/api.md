@@ -36,28 +36,56 @@ por SKU y sucursal. Ningún importe USD se estima en el navegador.
 El pronóstico muestra hasta las primeras cuatro semanas publicadas, ordenadas
 por fecha, y suma sus unidades únicamente si hay cuatro valores conocidos.
 Si faltan semanas o hay nulos, el total de cuatro semanas dice «No disponible».
-Cada barra SVG procede de una semana devuelta por el endpoint. El HTML inicial
-todavía no consume la comparación añadida a la API y no la calcula en el navegador.
+Cada barra SVG procede de una semana devuelta por el endpoint. El HTML consume
+`comparacion` para las cuatro semanas anteriores y la variación; los nulos se
+muestran como «No disponible». La gráfica grande usa las semanas observadas
+completas y la proyección publicada, con tabla de valores exactos. Los huecos
+no se unen ni se interpolan como registros. No hay banda de incertidumbre en
+este contrato y no se construye una global.
 
-Las prioridades se ordenan por severidad y, para desempatar sin inventar
-impacto, por tipo (quiebre, sobreinventario, anomalía), SKU y sucursal. Las
-anomalías se indican «Sin severidad» en el HTML inicial, pendiente de consumir
-los nuevos campos del contrato descritos más abajo.
+Las prioridades se ordenan por impacto conocido descendente y luego por
+severidad. Cada impacto muestra importe, método y «Estimación». El KPI de
+quiebre suma exclusivamente impactos de quiebre conocidos y marca el total
+como parcial si faltan importes; no mezcla capital inmovilizado con margen.
+Las anomalías muestran severidad y duración publicadas; no las recalcula el HTML.
 Se presentan tres filas iniciales y un botón «Ver más», sin truncar textos.
 El panel lateral usa diálogo modal, foco atrapado, cierre por botón/Esc/velo
 y devolución del foco; las tarjetas responden a clic, Enter y Espacio.
 
-El HTML inicial aún muestra «No disponible» para comparación e impacto,
-aunque ahora la API los entrega cuando existen datos suficientes. Siguen
-ausentes del contrato las alertas de caducidad. No se modificó el HTML en esta
-ampliación de la API. Tampoco se inventan acciones específicas para margen o
+Siguen ausentes del contrato las alertas de caducidad, el punto de reorden y
+las bandas de incertidumbre; se muestran como «No disponible».
+Tampoco se inventan acciones específicas para margen o
 pronóstico ni pedidos para una alerta sin recomendación vinculada. El pronóstico
 se muestra en unidades; la API no entrega su equivalente en USD.
 
+Reabastecimiento muestra hasta cinco recomendaciones positivas, por fecha de
+pedido ascendente y luego riesgo de quiebre; distingue fechas alcanzadas y
+futuras sin afirmar que el corte histórico represente necesidades actuales.
+El detalle incluye stock de seguridad, fecha, cantidad y motivo publicados.
+Desempeño consulta `/api/margen` por sucursal (hasta cuatro solicitudes
+simultáneas), ordena por monto descendente y permite seleccionar la sucursal.
+Con un filtro activo muestra solo esa sucursal. Las barras negativas se
+identifican con signo y texto; su longitud representa la magnitud absoluta.
+
+Tendencias se consulta exclusivamente al pulsar «Ver tendencias», mediante
+POST con `objetivo` fijo; el servicio actual no utiliza ese campo. Se muestran
+hashtag, categoría del hecho referenciado, propuesta, efecto esperado y
+`evidencia_verificada`, siempre como hipótesis. Los hashtags no mapeados se
+listan aparte. El asistente envía `pregunta` solo al enviar el formulario y
+muestra `respuesta` o el error explícito. Ambos POST llevan el filtro activo,
+no se reintentan automáticamente ni se ejecutan al cargar. Al cambiar de
+sucursal se cancelan solicitudes pendientes y se descartan resultados previos.
+El chat aparece sobre el detalle y devuelve el foco al cerrarlo con Esc.
+El banner de arranque consulta estado cada cinco segundos hasta disponibilidad
+o fallo; los bloques conservan sus tiempos de espera y reintentos independientes.
+
 Verificación: `uv run --offline --no-sync pytest tests/test_dashboard_html.py tests/test_api.py tests/test_api_startup.py -q --tb=short`.
-Además se comprobó en Edge sin interfaz a 1366×768 y 390×844, interceptando
-solicitudes con respuestas de TestClient: alcance, reintento independiente,
-carga inicial, teclado, retorno de foco, velo y panel móvil; sin servicios reales.
+Además se comprobó en Edge sin interfaz a 1366×768, 1280×720, 1920×1080 y
+390×844, interceptando solicitudes con respuestas de TestClient: alcance,
+reintento independiente, carga inicial, teclado, retorno de foco, velo, panel
+móvil, POST bajo demanda, errores 422/503, gráfico sin datos observados y
+campos nulos. No hubo servicios reales ni servidor de red. El script inline
+extraído pasó `node --check data/verification/dashboard-script.js`.
 
 ## Arranque y disponibilidad
 
