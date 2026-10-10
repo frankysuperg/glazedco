@@ -1,0 +1,70 @@
+"""Adaptador del SDK oficial google-genai, sin consultas ni cálculos de negocio."""
+
+import json
+from pathlib import Path
+from typing import Literal, Self
+
+from google import genai
+from google.genai import errors, types
+
+from .config import GeminiConfig, load_config
+
+Profile = Literal["analysis", "sql", "creative"]
+TEMPERATURES: dict[Profile, float] = {"analysis": 0.0, "sql": 0.0, "creative": 0.9}
+PROMPTS = Path(__file__).with_name("prompts")
+MetricValue = int | float | str | None
+
+
+class GeminiError(RuntimeError):
+    """Fallo de generación sin exponer credenciales ni contenido del proveedor."""
+
+
+class GeminiClient:
+    """Un método y tres perfiles. La construcción no genera contenido.
+
+    sdk_client permite inyectar un doble en pruebas. close() también cierra el
+    cliente inyectado; usar el wrapper como context manager libera recursos.
+    """
+
+    def __init__(self, config: GeminiConfig | None = None, *, sdk_client: genai.Client | None = None) -> None:
+        self.config = config if config is not None else load_config()
+        self._sdk = sdk_client if sdk_client is not None else genai.Client(api_key=self.config.api_key)
+
+    def generate(self, contents: str, *, profile: Profile = "analysis") -> str:
+        if profile not in TEMPERATURES:
+            raise ValueError("Perfil no admitido: usa analysis, sql o creative.")
+        instruction = (PROMPTS / f"{profile}.txt").read_text(encoding="utf-8")
+        try:
+            response = self._sdk.models.generate_content(
+                model=self.config.model, contents=contents,
+                config=types.GenerateContentConfig(
+                    temperature=TEMPERATURES[profile], system_instruction=instruction,
+                ),
+            )
+        except errors.APIError:
+            raise GeminiError("Gemini rechazó la solicitud; revisa llave, modelo, permisos o cuota.") from None
+        if not response.text or not response.text.strip():
+            raise GeminiError("Gemini no devolvió texto; la respuesta puede haber sido bloqueada o estar vacía.")
+        return response.text.strip()
+
+    def close(self) -> None:
+        self._sdk.close()
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+
+def explain_metrics(metrics: dict[str, MetricValue], *, client: GeminiClient) -> str:
+    """Explica métricas ya calculadas con analysis; no calcula ni consulta datos.
+
+    Las unidades deben estar indicadas en las claves o valores suministrados.
+    None significa dato desconocido, no cero. Rechaza NaN/infinito y tipos no
+    JSON; no modifica el diccionario ni añade valores derivados.
+    """
+    if any(not isinstance(key, str) for key in metrics):
+        raise ValueError("Los nombres de métricas deben ser texto.")
+    payload = json.dumps({"metricas": metrics}, ensure_ascii=False, allow_nan=False)
+    return client.generate(payload, profile="analysis")

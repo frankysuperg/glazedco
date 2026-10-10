@@ -8,6 +8,7 @@ dependencies = [
     "pandas>=2.2,<4",
     "pyarrow>=17",
     "scikit-learn>=1.9.1",
+    "google-genai>=2.29.0",
 ]
 
 [dependency-groups]
