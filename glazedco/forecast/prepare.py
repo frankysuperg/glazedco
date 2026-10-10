@@ -36,6 +36,7 @@ def weekly_demand(
     closures: pd.DataFrame | None = None,
     *,
     closure_end_inclusive: bool = True,
+    observation_window: tuple[pd.Timestamp, pd.Timestamp] | None = None,
 ) -> pd.DataFrame:
     """Suma unidades por sku, sucursal y semana; marca censura y aptitud de entrenamiento.
 
@@ -78,7 +79,17 @@ def weekly_demand(
         panel[column] = pd.to_numeric(panel[column], errors="coerce").fillna(0)
     panel["censurada"] = panel.inventory_tracked & (panel.dias_quiebre.gt(0) | panel.dias_stock_cero.gt(0))
     panel["censura_desconocida"] = panel.inventory_tracked & panel.inventory_days.eq(0)
+
+    dates = pd.concat([pd.to_datetime(fit.date, errors="coerce"), pd.to_datetime(inv.date, errors="coerce")]).dropna()
+    if observation_window is None and not dates.empty:
+        observation_window = (dates.min(), dates.max())
+    panel["parcial"] = False
+    if observation_window is not None:
+        obs_start, obs_end = (pd.Timestamp(d).normalize() for d in observation_window)
+        panel["parcial"] = panel.semana.lt(obs_start) | (panel.semana + pd.Timedelta(days=6)).gt(obs_end)
+
     panel["cierre"] = False
+
     panel["fuera_operacion"] = False
     if stores is not None and not stores.empty:
         meta = stores[["store_id"] + [c for c in ("opened_date", "closed_date") if c in stores.columns]].drop_duplicates("store_id")
@@ -94,8 +105,9 @@ def weekly_demand(
     if closures is not None and not closures.empty:
         panel["cierre"] = _weeks_closed(panel, closures, closure_end_inclusive)
     panel["entrenable"] = (
-        ~panel.censurada & ~panel.censura_desconocida & ~panel.cierre & ~panel.fuera_operacion
+        ~panel.censurada & ~panel.censura_desconocida & ~panel.cierre & ~panel.fuera_operacion & ~panel.parcial
     )
+    
     return panel.sort_values(["store_id", "sku", "semana"], kind="stable").reset_index(drop=True)
 
 

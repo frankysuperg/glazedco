@@ -62,7 +62,8 @@ def test_stockout_week_is_censored_not_trainable_zero() -> None:
 def test_untracked_sku_does_not_invent_stockout() -> None:
     sales = _sales([{"date": "2026-01-05", "units_sold": 1}])
     inventory = _inventory([])
-    panel = weekly_demand(sales, inventory, _products(tracked=0))
+    window = (pd.Timestamp("2026-01-01"), pd.Timestamp("2026-01-31"))
+    panel = weekly_demand(sales, inventory, _products(tracked=0), observation_window=window)
     assert not panel.censurada.any() and not panel.censura_desconocida.any()
     assert panel.entrenable.all()
 
@@ -156,3 +157,12 @@ def test_residual_bands_clip_at_zero() -> None:
     bands = residual_bands(pd.Series([1.0, 3.0]), pd.Series([-5.0, -1.0, 2.0]))
     assert (bands.yhat_low >= 0).all()
     assert bands.yhat_high.iloc[1] >= bands.yhat.iloc[1]
+
+def test_partial_edge_weeks_are_not_trainable() -> None:
+    dates = pd.date_range("2025-10-01", "2025-10-21")  # miércoles a martes
+    sales = pd.DataFrame({"store_id": "S1", "sku": "A", "date": dates, "units_sold": 1, "apta_pronostico": True})
+    inventory = pd.DataFrame({"store_id": "S1", "sku": "A", "date": dates, "closing_qty": 5, "stockout_hours": 0.0})
+    products = pd.DataFrame({"sku": ["A"], "inventory_tracked": [1]})
+    panel = weekly_demand(sales, inventory, products).set_index("semana")
+    assert panel.parcial.tolist() == [True, False, False, True]
+    assert panel.entrenable.tolist() == [False, True, True, False]
