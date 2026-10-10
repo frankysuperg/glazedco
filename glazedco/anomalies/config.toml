@@ -1,0 +1,12 @@
+# Referencia diaria: mismo día semanal dentro de los últimos 56 días.
+window_days = 56
+min_history = 6
+threshold = 6.0
+same_weekday = true
+# MAD normalizada con piso: evita división por cero en series constantes.
+scale_floor = 1.0
+percent_scale_floor = 0.5
+forecast_window_weeks = 12
+forecast_min_history = 6
+# No se adopta un ajuste automáticamente por detectar anomalías.
+forecast_action = "conservar"

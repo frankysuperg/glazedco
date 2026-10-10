@@ -6,6 +6,9 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import TimeSeriesSplit
 
+from glazedco.anomalies.config import AnomalyConfig
+from .anomalies import adjust_history
+
 from .models import croston_sba, is_intermittent, moving_average, seasonal_naive
 from .prepare import target_series
 from .select import choose_complex_model, fit_ridge, lag_frame, predict_origin, ridge_batch
@@ -35,6 +38,7 @@ class EvalResult:
     residuals: pd.Series
     histories: dict[tuple[object, object], np.ndarray] = field(default_factory=dict)
     weeks_index: dict[tuple[object, object], np.ndarray] = field(default_factory=dict)
+    training_panel: pd.DataFrame | None = None
 
 
 def _metric_rows(predictions: pd.DataFrame) -> pd.DataFrame:
@@ -55,9 +59,10 @@ def _metric_rows(predictions: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def evaluate_forecasts(panel: pd.DataFrame, *, horizon: int = 4, n_splits: int = 4, period: int = 4, window: int = 4) -> EvalResult:
+def evaluate_forecasts(panel: pd.DataFrame, *, horizon: int = 4, n_splits: int = 4, period: int = 4, window: int = 4, anomaly_config: AnomalyConfig | None = None) -> EvalResult:
     """TimeSeriesSplit sobre semanas globales; cada origen solo ve el pasado."""
-    labeled = lag_frame(panel)
+    training_panel = adjust_history(panel, anomaly_config) if anomaly_config is not None else panel.copy(deep=True)
+    labeled = lag_frame(training_panel)
     labeled["y"] = target_series(labeled)
     weeks = np.array(sorted(labeled.semana.dropna().unique()))
     if weeks.size < n_splits + horizon:
@@ -65,6 +70,9 @@ def evaluate_forecasts(panel: pd.DataFrame, *, horizon: int = 4, n_splits: int =
     splitter = TimeSeriesSplit(n_splits=n_splits, test_size=horizon)
     grouped = {key: group.sort_values("semana") for key, group in labeled.groupby(["store_id", "sku"], sort=False, dropna=False)}
     histories = {key: target_series(group).to_numpy(dtype=float) for key, group in grouped.items()}
+    # La verdad de validación nunca se excluye ni suaviza por ser anómala.
+    truth = {key: target_series(group.sort_values("semana")).to_numpy(dtype=float)
+             for key, group in panel.groupby(["store_id", "sku"], sort=False, dropna=False)}
     week_pos = {key: group.semana.to_numpy() for key, group in grouped.items()}
     records: list[dict[str, object]] = []
     for train_idx, test_idx in splitter.split(weeks):
@@ -96,7 +104,7 @@ def evaluate_forecasts(panel: pd.DataFrame, *, horizon: int = 4, n_splits: int =
                     idx = int(np.searchsorted(positions, future))
                     if idx >= len(positions) or pd.Timestamp(positions[idx]) != pd.Timestamp(future):
                         continue
-                    actual = history[idx]
+                    actual = truth[key][idx]
                     if not np.isfinite(actual):
                         continue
                     records.append({
@@ -117,7 +125,7 @@ def evaluate_forecasts(panel: pd.DataFrame, *, horizon: int = 4, n_splits: int =
         chosen = "ridge" if selection.keep_ridge else selection.best_baseline
         piece = predictions.loc[predictions.model.eq(chosen)]
         residuals = piece.y - piece.yhat
-    return EvalResult(predictions, metrics, selection, residuals, histories, week_pos)
+    return EvalResult(predictions, metrics, selection, residuals, histories, week_pos, training_panel)
 
 
 def residual_bands(point: pd.Series, residuals: pd.Series, low: float = 0.1, high: float = 0.9) -> pd.DataFrame:
@@ -130,7 +138,7 @@ def residual_bands(point: pd.Series, residuals: pd.Series, low: float = 0.1, hig
 
 
 def forecast_future(panel: pd.DataFrame, result: EvalResult, *, horizon: int = 4, period: int = 4, window: int = 4) -> pd.DataFrame:
-    labeled = lag_frame(panel)
+    labeled = lag_frame(result.training_panel if result.training_panel is not None else panel)
     ridge = fit_ridge(labeled) if result.selection.keep_ridge else None
     rows: list[dict[str, object]] = []
     for key, history in result.histories.items():
