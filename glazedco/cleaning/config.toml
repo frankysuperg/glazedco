@@ -1,0 +1,25 @@
+money_tolerance = 0.01
+numeric_epsilon = 0.000000001
+inventory_tolerance = 0.0
+nonnegative_min = 0.0
+positive_min_exclusive = 0.0
+stockout_min = 0.0
+stockout_max = 24.0
+cost_fallback = "none"
+fallback_same_day = false
+closure_end_inclusive = true
+price_end_inclusive = true
+store_activity_source = "raw_sales"
+quarantine_null_keys = true
+quarantine_missing_sale_amounts = true
+fetch_size = 25000
+received_statuses = ["Delivered", "Short-shipped"]
+pending_statuses = ["In transit", "Cancelled"]
+sales_amount_columns = ["unit_price", "gross_sales", "discount_amount", "net_sales"]
+kpi_hour_columns = ["staff_hours", "open_hours"]
+
+[keys]
+products = ["sku"]
+product_barcodes = ["barcode"]
+purchase_orders = ["po_id", "store_id", "sku"]
+sales_daily = ["date", "store_id", "sku"]

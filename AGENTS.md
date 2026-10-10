@@ -9,6 +9,7 @@
 - Python con `uv`, pandas, scikit-learn (Prophet solo si aporta), FastAPI, PostgreSQL, Gemini, FastMCP y TrendsAPI.
 
 ## Desarrollo y datos
+- Antes de cualquier tarea con datos, lee [docs/dataset_context.md](docs/dataset_context.md); si contradice una definición de este archivo, gana dataset_context.md.
 - La base es PostgreSQL en Tiger Data, ya poblada; ningún agente modifica su esquema ni sus datos.
 - Haz el cambio mínimo solicitado; usa módulos pequeños, tipado y pruebas pytest.
 - Mantén secretos en variables de entorno y `.env.example` sin valores reales.
