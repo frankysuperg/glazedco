@@ -1,0 +1,5 @@
+# Clasificación de presentación, sobre el valor absoluto del puntaje existente.
+anomaly_medium = 3.0
+anomaly_high = 5.0
+# Precio medio ponderado por unidades; ventana inclusiva hasta el corte.
+price_days = 28

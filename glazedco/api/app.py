@@ -2,11 +2,12 @@
 
 from typing import Annotated
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from anyio import create_task_group, to_thread
 from fastapi import FastAPI, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from starlette.exceptions import HTTPException
 
 from .assistant import Assistant, LiveAssistant
@@ -62,11 +63,15 @@ def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | Non
 
     @app.middleware("http")
     async def readiness(request: Request, call_next):
-        if request.url.path != "/api/estado" and not state.listo:
+        if request.url.path not in ("/", "/api/estado") and not state.listo:
             result = NotReadyResponse(error=ErrorDetail(codigo="API_NO_LISTA", mensaje=state.detalle),
                                       reintentar_despues=5)
             return JSONResponse(status_code=503, content=result.model_dump(), headers={"Retry-After": "5"})
         return await call_next(request)
+
+    @app.get("/", response_class=FileResponse, include_in_schema=False)
+    async def dashboard_page():
+        return FileResponse(Path(__file__).with_name("static") / "index.html", media_type="text/html")
 
     @app.get("/api/estado", response_model=ReadyState)
     async def status():
@@ -110,7 +115,7 @@ def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | Non
     @app.get("/api/anomalias", response_model=Page[Anomaly])
     def anomalies(sucursal: Branch = None, limite: Limit = 100, desplazamiento: Offset = 0):
         scope = data.scope(sucursal)
-        return _page(records(data.select(data.report("anomalies"), sucursal)), scope, limite, desplazamiento)
+        return _page(records(data.anomalies(sucursal)), scope, limite, desplazamiento)
 
     @app.get("/api/alertas", response_model=Page[Alert])
     def alerts(sucursal: Branch = None, limite: Limit = 100, desplazamiento: Offset = 0):

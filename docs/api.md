@@ -1,7 +1,7 @@
 # Backend del dashboard
 
-FastAPI expone los módulos existentes, sin frontend ni cambios de reglas de
-negocio. Se consultó la documentación vigente de
+FastAPI expone los módulos existentes y un dashboard HTML autocontenido, sin
+cambios de reglas de negocio. Se consultó la documentación vigente de
 [modelos de respuesta](https://fastapi.tiangolo.com/tutorial/response-model/) y
 [errores](https://fastapi.tiangolo.com/tutorial/handling-errors/) antes de implementar.
 
@@ -9,13 +9,63 @@ Arranque local: `uv run uvicorn glazedco.api.app:app --host 127.0.0.1 --port 800
 OpenAPI en `/openapi.json`, documentación interactiva en `/docs`.
 La aplicación no consulta PostgreSQL ni Gemini al importarse.
 
+## Dashboard en la raíz
+
+`GET /` sirve `glazedco/api/static/index.html` mediante FileResponse, incluso
+durante el precalentamiento. CSS, JavaScript y SVG propios viven en ese archivo;
+no usa CORS, CDN, dependencias de frontend, fuentes ni imágenes remotas. Las
+rutas `/api/*` conservan sus contratos. El HTML consulta `/api/estado` y aplica
+un plazo de cinco minutos por tarjeta, con reintento independiente. Al cambiar
+de sucursal cancela las peticiones anteriores y recarga todos los indicadores.
+
+Se verificaron con TestClient los contratos Pydantic de estado, resumen,
+margen, pronóstico semanal, alertas, reabastecimiento, anomalías y sucursales,
+con datos de prueba globales y filtrados. Las listas se paginan hasta completar
+`total`, sin asumir una cantidad fija de sucursales ni limitar silenciosamente
+alertas o recomendaciones. Las capturas de esos contratos para verificación
+local viven en `data/verification/`; no se incluyen como datos del HTML.
+
+El margen muestra `margen_bruto_porcentaje`, `margen_bruto_monto` y
+`cobertura_ingresos_pct` (cobertura de ingresos con costo, no de productos).
+El riesgo cuenta alertas `quiebre_stock` con severidad `alta`; los pedidos de
+hoy suman cantidades positivas cuya `fecha_pedido` coincide con la fecha local
+del navegador. Se advierte que el plan pertenece al corte histórico y no
+confirma una necesidad actual. Las recomendaciones del detalle se relacionan
+por SKU y sucursal. Ningún importe USD se estima en el navegador.
+
+El pronóstico muestra hasta las primeras cuatro semanas publicadas, ordenadas
+por fecha, y suma sus unidades únicamente si hay cuatro valores conocidos.
+Si faltan semanas o hay nulos, el total de cuatro semanas dice «No disponible».
+Cada barra SVG procede de una semana devuelta por el endpoint. El HTML inicial
+todavía no consume la comparación añadida a la API y no la calcula en el navegador.
+
+Las prioridades se ordenan por severidad y, para desempatar sin inventar
+impacto, por tipo (quiebre, sobreinventario, anomalía), SKU y sucursal. Las
+anomalías se indican «Sin severidad» en el HTML inicial, pendiente de consumir
+los nuevos campos del contrato descritos más abajo.
+Se presentan tres filas iniciales y un botón «Ver más», sin truncar textos.
+El panel lateral usa diálogo modal, foco atrapado, cierre por botón/Esc/velo
+y devolución del foco; las tarjetas responden a clic, Enter y Espacio.
+
+El HTML inicial aún muestra «No disponible» para comparación e impacto,
+aunque ahora la API los entrega cuando existen datos suficientes. Siguen
+ausentes del contrato las alertas de caducidad. No se modificó el HTML en esta
+ampliación de la API. Tampoco se inventan acciones específicas para margen o
+pronóstico ni pedidos para una alerta sin recomendación vinculada. El pronóstico
+se muestra en unidades; la API no entrega su equivalente en USD.
+
+Verificación: `uv run --offline --no-sync pytest tests/test_dashboard_html.py tests/test_api.py tests/test_api_startup.py -q --tb=short`.
+Además se comprobó en Edge sin interfaz a 1366×768 y 390×844, interceptando
+solicitudes con respuestas de TestClient: alcance, reintento independiente,
+carga inicial, teclado, retorno de foco, velo y panel móvil; sin servicios reales.
+
 ## Arranque y disponibilidad
 
 El [lifespan de FastAPI](https://fastapi.tiangolo.com/advanced/events/) lanza
 el precalentamiento en un trabajador en segundo plano y cede inmediatamente
 el control al servidor. `GET /api/estado` devuelve `{"listo": false, "detalle": "..."}`
 mientras trabaja y `listo: true` únicamente cuando se completaron todos los
-cálculos. Las demás rutas devuelven 503 sin esperar al trabajador, con
+cálculos. Salvo `/` y `/api/estado`, las rutas devuelven 503 sin esperar al trabajador, con
 `error.codigo: API_NO_LISTA`, un mensaje seguro, `reintentar_despues: 5` y
 la cabecera `Retry-After: 5`. El fallo de preparación permanece visible en
 el estado; corregir su causa y reiniciar. No se publican excepciones privadas.
@@ -141,6 +191,70 @@ Limitación reportada sin corregir: `_unit_margin` en reabastecimiento seleccion
 precio por SKU sin distinguir sucursal. En la vista global, precios distintos
 pueden afectar la priorización con presupuesto. La vista filtrada solo entrega
 precios de su sucursal. No se cambió esa lógica de negocio.
+
+## Comparación, impacto y severidad adicionales
+
+`GET /api/pronostico/semanal` añade `comparacion`; el mismo objeto aparece en
+`pronostico.comparacion` del resumen. Los campos anteriores conservan sus cifras.
+`fecha_corte` procede de la política de reabastecimiento (2026-09-30).
+`semanas_anteriores` contiene cuatro semanas completas de lunes a domingo:
+2026-08-31 a 2026-09-27; excluye la semana parcial del corte. Cada elemento
+entrega `semana`, `fin`, `unidades`, `registros` y `dias_con_registros`.
+Son unidades vendidas observadas, no demanda insatisfecha; la cobertura informa
+cuántos días tienen registros, sin rellenar días ausentes con ventas inventadas.
+
+`unidades_reales_4_semanas` suma esas semanas;
+`unidades_pronosticadas_4_semanas` suma las cuatro semanas desde el inicio
+configurado del pronóstico (2026-10-05). `variacion_porcentual` es
+`(pronosticadas − reales) / reales × 100`. Si el denominador es cero, falta una
+semana observada, hay unidades inválidas o faltan semanas pronosticadas, la
+variación es nula y `motivo` explica la causa. Una semana observada sin registros
+es desconocida, no cero. Todos estos valores respetan el filtro de sucursal.
+
+Cada elemento de `GET /api/alertas` añade el objeto `impacto` con
+`impacto_usd_estimado`, `metodo`, `estimacion: true` y `motivo` (nulo cuando se
+puede calcular). El `motivo` original de la alerta se conserva por separado.
+Campos auxiliares: `dias_en_riesgo`, `unidades_en_riesgo`, `unidades_exceso` y
+`margen_unitario`, nulos cuando no corresponden o faltan datos.
+
+- Quiebre: demanda pronosticada sin cobertura hasta la reposición × margen
+  bruto unitario. La demanda diaria reutiliza el reparto semanal existente;
+  se consume la posición de inventario hasta agotarla y se incluyen fracciones
+  de día. Margen unitario = precio medio ponderado (`Σ net_sales / Σ units_sold`)
+  del SKU en esa sucursal durante los últimos 28 días inclusivos al corte,
+  menos `products.unit_cost`. El plazo usa órdenes recibidas de esa sucursal
+  hasta el corte o el plazo estándar del proveedor; no acepta el respaldo
+  genérico configurado. Un margen negativo produce un importe negativo.
+- Exceso: `max(posición de inventario − demanda durante cobertura objetivo, 0)
+  × unit_cost`. Es **capital inmovilizado**, no pérdida de margen. Usa la
+  cobertura objetivo existente, limitada por vida útil para perecederos;
+  no incluye stock de seguridad en este umbral monetario.
+
+La posición es existencias más unidades en tránsito del corte, como en la
+política existente; no garantiza sus fechas de llegada. No se extrapola un
+horizonte pronosticado insuficiente. Costo, precio, inventario, plazo o
+pronóstico ausentes/ambiguos dejan el impacto nulo con motivo explícito;
+no se sustituye por cero. Los impactos siempre se calculan por SKU y sucursal,
+también en la vista global. Son estimaciones y no deben sumarse como si capital
+inmovilizado y margen en riesgo representaran el mismo concepto.
+
+Las alertas con impacto conocido se ordenan primero por importe descendente;
+las que no lo tienen van después por severidad (alta, media, desconocida).
+Los desempates son deterministas por sucursal, SKU y tipo. Se ordena antes de
+paginar; no se cambia qué riesgos abren alertas ni sus conteos.
+
+`GET /api/anomalias` añade `severidad` alta/media/baja según el valor absoluto
+del puntaje publicado: alta desde 5, media desde 3, baja por debajo de 3.
+Los umbrales inclusivos `anomaly_high` y `anomaly_medium` y la ventana de precio
+`price_days` se configuran en `glazedco/api/enrichment.toml`; requieren reinicio.
+Un puntaje no finito o ausente deja severidad nula con `motivo_severidad`.
+`duracion_dias` es la longitud de la racha de fechas consecutivas por sucursal,
+SKU, entidad, métrica y tipo; un día aislado vale 1, duplicados no suman y
+fechas inválidas devuelven nulo. Se calcula antes de paginar. Describe el
+historial publicado, sin inferir persistencia futura ni una tendencia.
+
+Verificación sin servicios reales:
+`uv run --offline --no-sync pytest tests/test_api_enrichment.py tests/test_api.py tests/test_api_startup.py tests/test_dashboard_html.py tests/test_strategies.py -q --tb=short`.
 
 ## Asistente y tendencias
 

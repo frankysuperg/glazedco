@@ -16,6 +16,8 @@ from glazedco.replenishment.recommend import OUTPUT_COLUMNS, recommend_replenish
 from .errors import APIError
 from .cache import load_tables, max_cache_age
 from .models import Alert, ForecastResponse, Margin, Scope, Week
+from .enrichment import EnrichmentConfig, comparison, enrich_anomalies, load_config as enrichment_config
+from .impact import ImpactEstimator
 
 
 class DataSource(Protocol):
@@ -46,15 +48,18 @@ def records(frame: pd.DataFrame) -> list[dict]:
 
 
 class Dashboard:
-    def __init__(self, source: DataSource | None = None, config: ReplenishmentConfig | None = None) -> None:
+    def __init__(self, source: DataSource | None = None, config: ReplenishmentConfig | None = None,
+                 enrichment: EnrichmentConfig | None = None) -> None:
         self.source = source or LocalSource()
         self.config = config or load_config()
+        self.enrichment = enrichment or enrichment_config()
         self._tables: dict[str, pd.DataFrame] | None = None
         self._reports: dict[str, pd.DataFrame] = {}
         self._recommendations: dict[str | None, pd.DataFrame] = {}
         self._margins: dict[str | None, Margin] = {}
         self._forecasts: dict[str | None, ForecastResponse] = {}
         self._alerts: dict[str | None, list[Alert]] = {}
+        self._anomalies: dict[str | None, pd.DataFrame] = {}
         self._lock = RLock()
 
     def warmup(self) -> None:
@@ -66,6 +71,7 @@ class Dashboard:
             self._margins[store] = self.margin(store)
             self._forecasts[store] = self.forecast(store)
             self._alerts[store] = self.alerts(store)
+            self._anomalies[store] = self.anomalies(store)
 
     def tables(self) -> dict[str, pd.DataFrame]:
         with self._lock:
@@ -117,7 +123,15 @@ class Dashboard:
                               unidades=float(values.sum()) if values.notna().all() else None,
                               series=len(group), series_con_pronostico=int(values.notna().sum())))
         total = (sum(w.unidades for w in weeks) if weeks and all(w.unidades is not None for w in weeks) else None)
-        return ForecastResponse(**scope.model_dump(), semanas=weeks, unidades_agregadas=total)
+        extra = comparison(self.select(self.tables()["sales_daily"], store), weeks,
+                           self.config.as_of_date, self.config.forecast_start_date)
+        return ForecastResponse(**scope.model_dump(), semanas=weeks, unidades_agregadas=total, comparacion=extra)
+
+    def anomalies(self, store: str | None) -> pd.DataFrame:
+        self.scope(store)
+        if store in self._anomalies:
+            return self._anomalies[store].copy()
+        return enrich_anomalies(self.select(self.report("anomalies"), store), self.enrichment)
 
     def recommendations(self, store: str | None) -> pd.DataFrame:
         self.scope(store)
@@ -145,6 +159,8 @@ class Dashboard:
         if store in self._alerts:
             return [alert.model_copy(deep=True) for alert in self._alerts[store]]
         result: list[Alert] = []
+        estimator = ImpactEstimator({name: self.select(frame, store) for name, frame in self.tables().items()},
+                                    self.select(self.report("forecast"), store), self.config, self.enrichment)
         severity = {"alto": "alta", "medio": "media", "desconocido": "desconocida"}
         for row in self.recommendations(store).itertuples(index=False):
             for field, kind in (("riesgo_quiebre", "quiebre_stock"), ("riesgo_exceso", "sobreinventario")):
@@ -154,5 +170,10 @@ class Dashboard:
                 if risk not in severity:
                     raise APIError(503, "RIESGO_INVALIDO", "El módulo devolvió un riesgo no reconocido.")
                 result.append(Alert(store_id=row.store_id, sku=row.sku, tipo=kind,
-                                    severidad=severity[risk], fecha_corte=self.config.as_of_date, motivo=row.motivo))
-        return result
+                                    severidad=severity[risk], fecha_corte=self.config.as_of_date, motivo=row.motivo,
+                                    impacto=estimator.estimate(row.store_id, row.sku, kind)))
+        ranks = {"alta": 0, "media": 1, "desconocida": 2}
+        return sorted(result, key=lambda alert: (
+            alert.impacto.impacto_usd_estimado is None,
+            -alert.impacto.impacto_usd_estimado if alert.impacto.impacto_usd_estimado is not None else 0,
+            ranks[alert.severidad], alert.store_id, alert.sku, alert.tipo))

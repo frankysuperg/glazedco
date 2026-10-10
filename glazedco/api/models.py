@@ -42,10 +42,28 @@ class Week(Model):
     series_con_pronostico: int
 
 
+class ObservedWeek(Model):
+    semana: date
+    fin: date
+    unidades: float | None
+    registros: int
+    dias_con_registros: int
+
+
+class ForecastComparison(Model):
+    fecha_corte: date
+    semanas_anteriores: list[ObservedWeek]
+    unidades_reales_4_semanas: float | None
+    unidades_pronosticadas_4_semanas: float | None
+    variacion_porcentual: float | None
+    motivo: str | None
+
+
 class ForecastResponse(Scope):
     objetivo: str = "Unidades de ventas observadas; no demanda insatisfecha"
     semanas: list[Week]
     unidades_agregadas: float | None
+    comparacion: ForecastComparison | None = None
 
 
 Risk = Literal["alto", "medio", "bajo", "desconocido"]
@@ -77,6 +95,20 @@ class Anomaly(Model):
     tipo: str
     cobertura_costo_pct: float | None
     causa_contextual: str
+    severidad: Literal["alta", "media", "baja"] | None = None
+    motivo_severidad: str | None = None
+    duracion_dias: int | None = None
+
+
+class EstimatedImpact(Model):
+    impacto_usd_estimado: float | None
+    metodo: str
+    estimacion: Literal[True] = True
+    motivo: str | None = None
+    dias_en_riesgo: float | None = None
+    unidades_en_riesgo: float | None = None
+    unidades_exceso: float | None = None
+    margen_unitario: float | None = None
 
 
 class Alert(Model):
@@ -87,6 +119,7 @@ class Alert(Model):
     estado: Literal["abierta"] = "abierta"
     fecha_corte: date
     motivo: str
+    impacto: EstimatedImpact | None = None
 
 
 class Store(Model):
