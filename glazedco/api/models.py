@@ -4,7 +4,7 @@ from datetime import date
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
-from glazedco.strategies.validation import Strategy
+from glazedco.strategies.validation import Discard, Strategy
 
 
 class Model(BaseModel):
@@ -164,6 +164,7 @@ class StrategyResponse(Scope):
     hechos: dict
     sin_relacion_con_catalogo: list[str]
     estrategias_descartadas: int
+    descartes: list[Discard] = Field(default_factory=list)
     aviso: str
 
 

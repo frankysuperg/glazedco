@@ -306,6 +306,22 @@ posvalidadas. Conserva `503 TENDENCIAS_NO_DISPONIBLES` si falta la llave o falla
 la fuente. El mapeo inicial vacío exige configurar relaciones aprobadas antes
 de generar propuestas; no se presentan anomalías como tendencias.
 
+La respuesta 200 de `/api/tendencias/estrategias` incluye `descartes`, una lista
+de `{ "indice": 0, "motivo": "cifra_sin_origen" }`, vacía si no hubo rechazos.
+`indice` es la posición desde cero en la lista de cada intento, o `null` si el
+JSON/envoltura es inválido. Se acumulan los descartes de ambos intentos en orden
+(los índices pueden repetirse); `estrategias_descartadas` es su longitud.
+Solo se expone el primer código de rechazo por propuesta: `esquema_invalido`,
+`referencia_inexistente`, `referencia_nula`, `hashtag_no_citado`, `margen_no_citado`,
+`hashtag_ajeno`, `cifra_en_efecto` o `cifra_sin_origen`. Los mismos códigos se
+registran en consola sin contenido del modelo ni datos sensibles.
+Si falta cobertura de hashtags relacionados (máximo cinco) o todas las
+propuestas fallan, el servidor hace un único reintento creative con los mismos
+hechos y códigos como retroalimentación; no vuelve a consultar TrendsAPI.
+`estrategias` contiene solo propuestas que pasan todas las reglas en el último
+intento; puede seguir vacía. Los errores de Gemini conservan el 503
+`ESTRATEGIAS_NO_DISPONIBLES`. Detalles en [strategies.md](strategies.md).
+
 ## Errores y pruebas
 
 Formato: `{"error":{"codigo":"...","mensaje":"..."}}`.

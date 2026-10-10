@@ -51,5 +51,38 @@ inválido se descarta; errores de Gemini producen 503 ESTRATEGIAS_NO_DISPONIBLES
 Esta comprobación de pertenencia no demuestra causalidad ni garantiza resultados
 comerciales; las propuestas requieren evaluación antes de ejecutarse.
 
+### Diagnóstico y reintento (prompt creativo v2)
+
+`descartes` es una lista de `{ "indice": 0, "motivo": "referencia_inexistente" }`.
+El índice parte de cero dentro de la lista del intento; es `null` si el JSON o
+su envoltura es inválido. Se informa el primer fallo por propuesta, en orden:
+`esquema_invalido`, `referencia_inexistente` (incluye índice de hecho inexistente),
+`referencia_nula`, `hashtag_no_citado`, `margen_no_citado`, `hashtag_ajeno`,
+`cifra_en_efecto`, `cifra_sin_origen`. Los códigos son estables y se imprimen
+también en el log del servidor, sin texto del modelo, valores ni excepciones.
+Los descartes se acumulan en orden de intento; un índice puede repetirse entre
+intentos. `estrategias_descartadas` siempre es la longitud de `descartes`.
+
+Si no hay propuestas válidas o no cubren los hashtags relacionados (hasta cinco),
+se regenera la lista completa una sola vez con el perfil creative. Se reutilizan
+los mismos hechos y se añaden únicamente códigos de rechazo y una instrucción
+fija como retroalimentación, sin cifras ni texto de propuestas rechazadas.
+Una lista vacía o cobertura incompleta sin rechazos produce códigos vacíos.
+Se publica únicamente la lista posvalidada del último intento: si todas sus
+propuestas fallan, queda vacía con los descartes acumulados. Máximo dos llamadas
+a Gemini y una consulta al cliente TrendsAPI; sin mapeo no se llama a Gemini.
+Un error del proveedor en cualquiera de los intentos conserva el 503 existente.
+
+El prompt versionado `glazedco/gemini/prompts/creative.txt` pide una propuesta
+por hashtag, máximo cinco, citando a la vez hashtag y margen mediante rutas
+como `/hechos_tendencias/0/hashtag` y
+`/hechos_tendencias/0/margen/margen_bruto_porcentaje`. El validador resuelve esas
+rutas exclusivamente dentro del hecho indicado; conserva las rutas relativas
+anteriores por compatibilidad. No cambia los criterios de evidencia ni cifras.
+El efecto esperado no admite dígitos. El ejemplo ficticio del prompt solo
+enseña formato: no se agrega a los hechos ni se publica como respaldo.
+El antiguo contador ocultaba la causa de rechazo; sin la respuesta original
+no puede atribuirse el caso observado a una regla concreta.
+
 Verificación local sin servicios:
 `uv run --offline --no-sync pytest tests/test_strategies.py tests/test_api.py tests/test_gemini.py tests/test_social.py -q --tb=short`
