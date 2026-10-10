@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException
 from .assistant import Assistant, LiveAssistant
 from .data import Dashboard, records
 from .errors import APIError
+from glazedco.strategies.service import StrategyService
 from .models import (
     Alert, Anomaly, Answer, ErrorDetail, ErrorResponse, ForecastResponse, MarginResponse,
     Page, Question, Replenishment, Scope, Store, StrategyRequest, StrategyResponse, Summary,
@@ -31,9 +32,11 @@ def _page(items: list, scope: Scope, limit: int, offset: int) -> dict:
             "limite": limit, "desplazamiento": offset}
 
 
-def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | None = None) -> FastAPI:
+def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | None = None,
+               strategy_service: StrategyService | None = None) -> FastAPI:
     data = dashboard or Dashboard()
     assistant_service = assistant or LiveAssistant()
+    strategy_service = strategy_service or StrategyService(data)
     app = FastAPI(title="Glazed Co. Dashboard API", version="0.1.0", debug=False,
                   responses={code: {"model": ErrorResponse} for code in (404, 422, 500, 503)})
 
@@ -101,8 +104,7 @@ def create_app(*, dashboard: Dashboard | None = None, assistant: Assistant | Non
 
     @app.post("/api/tendencias/estrategias", response_model=StrategyResponse)
     async def strategies(body: StrategyRequest, sucursal: Branch = None):
-        await to_thread.run_sync(data.scope, sucursal)
-        raise APIError(503, "TENDENCIAS_NO_DISPONIBLES", "Fuente de tendencias no disponible.")
+        return await to_thread.run_sync(strategy_service.generate, sucursal)
 
     return app
 

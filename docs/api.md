@@ -88,9 +88,11 @@ no puede eliminar el filtro ni ampliarlo con condiciones. CTE y subconsultas
 también quedan restringidas. Las consultas a maestros sin `store_id` se rechazan
 en este modo; no se inventan relaciones de sucursal para esos maestros.
 
-Por decisión del usuario, tendencias devuelve `503 TENDENCIAS_NO_DISPONIBLES`
-con «Fuente de tendencias no disponible». No invoca Gemini creativo ni presenta
-anomalías como tendencias. El contrato queda preparado para una fuente verificada.
+Tendencias usa ahora el flujo documentado en [strategies.md](strategies.md):
+mapeo explícito, hechos internos por categoría y propuestas de Gemini creativo
+posvalidadas. Conserva `503 TENDENCIAS_NO_DISPONIBLES` si falta la llave o falla
+la fuente. El mapeo inicial vacío exige configurar relaciones aprobadas antes
+de generar propuestas; no se presentan anomalías como tendencias.
 
 ## Errores y pruebas
 

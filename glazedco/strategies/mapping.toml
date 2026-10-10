@@ -1,0 +1,26 @@
+# Relaciones aprobadas por negocio; no se infieren del texto del hashtag.
+# Añadir entradas [hashtags."#etiqueta"] con categories = ["categoría exacta"].
+# Alternativamente skus = ["SKU exacto"]; se resuelve a su categoría del catálogo.
+# No se incluyen relaciones ficticias ni categorías sin verificar.
+weeks = 4
+
+[hashtags."#halloween"]
+categories = ["Bakery", "Specialty Beverage"]
+
+[hashtags."#nfl"]
+categories = ["Sandwiches", "Coffee & Tea"]
+
+[hashtags."#football"]
+categories = ["Sandwiches", "Coffee & Tea"]
+
+[hashtags."#coffee"]
+categories = ["Coffee & Tea"]
+
+[hashtags."#pumpkinspice"]
+categories = ["Specialty Beverage", "Bakery"]
+
+[hashtags."#breakfast"]
+categories = ["Sandwiches", "Coffee & Tea"]
+
+[hashtags."#donut"]
+categories = ["Bakery"]

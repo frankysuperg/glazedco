@@ -4,6 +4,7 @@ from datetime import date
 from typing import Generic, Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
+from glazedco.strategies.validation import Strategy
 
 
 class Model(BaseModel):
@@ -126,7 +127,11 @@ class StrategyRequest(Model):
 
 
 class StrategyResponse(Scope):
-    estrategias: list[str]
+    estrategias: list[Strategy]
+    hechos: dict
+    sin_relacion_con_catalogo: list[str]
+    estrategias_descartadas: int
+    aviso: str
 
 
 class ErrorDetail(Model):

@@ -165,7 +165,10 @@ def test_forecast_missing_is_null_and_filter_independent(source):
         assert client.get("/api/pronostico/semanal?sucursal=S1").json()["unidades_agregadas"] == 70
 
 
-def test_trends_unavailable_is_explicit(source):
+def test_trends_unavailable_is_explicit(source, monkeypatch):
+    from glazedco.social.models import HashtagResult, SocialError
+    monkeypatch.setattr("glazedco.strategies.service.TrendsClient.get_trending_hashtags",
+                        lambda self: HashtagResult(error=SocialError(codigo="LLAVE_AUSENTE", mensaje="Ausente")))
     with client_for(source) as client:
         result = client.post("/api/tendencias/estrategias", json={"objetivo": "Mejorar ventas"})
     assert result.status_code == 503
