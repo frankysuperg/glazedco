@@ -11,6 +11,8 @@ dependencies = [
     "google-genai>=2.29.0",
     "sqlglot>=30,<31",
     "fastmcp>=3,<4",
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
 ]
 
 [dependency-groups]
