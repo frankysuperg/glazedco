@@ -1,8 +1,8 @@
 # Reglas del proyecto
 
 ## Negocio
-- Retail con sucursales físicas y digitales agrupadas por región; cada región tiene un centro de distribución (CD) que reabastece sus sucursales.
-- El dashboard inicia en **Todas las sucursales** y permite filtrar por región y sucursal.
+- Retail con sucursales físicas.
+- El dashboard inicia en **Todas las sucursales** y permite filtrar por sucursal.
 - Margen bruto = ingresos por ventas − COGS; porcentaje de margen = margen bruto / ingresos × 100. Mantén monto y porcentaje separados; con ingresos de 0, el porcentaje es nulo.
 
 ## Stack
