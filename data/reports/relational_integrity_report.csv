@@ -1,0 +1,22 @@
+source_file,column,target_file,target_column,rows_checked,invalid_rows,distinct_invalid_values,sample_invalid_values,status
+products,supplier_id,suppliers,supplier_id,1018,0,0,,OK
+product_barcodes,sku,products,sku,1457,40,33,"SKU-100040, SKU-100284, SKU-100432, SKU-100693, SKU-100705, SKU-100852, SKU-101436, SKU-101926, SKU-102029, SKU-102200",REFERENCIAS INVÁLIDAS
+stores,site_id,sites,site_id,40,1,1,ST99,REFERENCIAS INVÁLIDAS
+store_closures,store_id,stores,store_id,7,0,0,,OK
+prices,store_id,stores,store_id,3057,39,3,"S120, S099, S100",REFERENCIAS INVÁLIDAS
+prices,sku,products,sku,3057,96,62,"SKU-867995, SKU-884304, SKU-100040, SKU-801235, SKU-870938, SKU-884120, SKU-851063, SKU-814419, SKU-841299, SKU-861894",REFERENCIAS INVÁLIDAS
+promotions,department,products,department,13,0,0,,OK
+purchase_orders,store_id,stores,store_id,262748,0,0,,OK
+purchase_orders,sku,products,sku,262748,3545,2,"SKU-100040, sku-100040",REFERENCIAS INVÁLIDAS
+purchase_orders,supplier_id,suppliers,supplier_id,262748,50,1,SUP99,REFERENCIAS INVÁLIDAS
+sales_daily,store_id,stores,store_id,589602,74,31,"S0032, S0011, S0021, S0012, S0019, S0026, S0028, S0035, S0038, S0030",REFERENCIAS INVÁLIDAS
+sales_daily,sku,products,sku,589602,7104,477,"SKU-100040, SKU-712431, SKU-789562, SKU-775661, SKU-774088, SKU-776327, SKU-711813, SKU-715444, sku-100040, SKU-774506",REFERENCIAS INVÁLIDAS
+sales_daily,promo_id,promotions,promo_id,70235,60,1,PR999,REFERENCIAS INVÁLIDAS
+inventory_daily,store_id,stores,store_id,493611,0,0,,OK
+inventory_daily,sku,products,sku,493611,8213,2,"SKU-100040, sku-100040",REFERENCIAS INVÁLIDAS
+store_daily_kpis,store_id,stores,store_id,12784,0,0,,OK
+weather_daily,site_id,sites,site_id,7300,0,0,,OK
+store_daily_kpis,date,calendar,date,12784,0,0,,OK
+weather_daily,date,calendar,date,7300,0,0,,OK
+inventory_daily,date,calendar,date,493611,0,0,,OK
+products,sku (inventory_tracked=1),inventory_daily,sku,89,1,1,SKU100040,SKUs SIN INVENTARIO

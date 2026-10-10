@@ -1,0 +1,139 @@
+VALIDACIÓN POSTERIOR A LA LIMPIEZA
+========================================
+[OK] Los 14 CSV originales no cambiaron (SHA-256 igual antes y después).
+[OK] calendar: raw=365 limpio=365 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] inventory_daily: raw=494111 limpio=493611 retiradas=500 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] prices: raw=3097 limpio=3057 retiradas=40 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] product_barcodes: raw=1457 limpio=1457 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] products: raw=1028 limpio=1018 retiradas=10 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] promotions: raw=13 limpio=13 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] purchase_orders: raw=262748 limpio=262748 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] sales_daily: raw=592602 limpio=589602 retiradas=3000 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] sites: raw=20 limpio=20 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] store_closures: raw=7 limpio=7 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] store_daily_kpis: raw=12809 limpio=12784 retiradas=25 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] stores: raw=40 limpio=40 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] suppliers: raw=8 limpio=8 retiradas=0 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] weather_daily: raw=7320 limpio=7300 retiradas=20 | columnas idénticas=True | duplicados exactos restantes=0
+[OK] Conciliación net_sales: raw=26429759.22 - retirado=131455.58 = limpio=26298303.64
+[OK] Conciliación units_sold inventario: raw=3248952 - retirado=3863 = limpio=3245089
+[OK] calendar: clave de negocio única
+[OK] inventory_daily: clave de negocio única
+PENDIENTE prices: 207 filas comparten clave de negocio ['store_id', 'sku', 'effective_from'] con valores distintos (se conservan)
+PENDIENTE product_barcodes: 30 filas comparten clave de negocio ['barcode'] con valores distintos (se conservan)
+PENDIENTE products: 54 filas comparten clave de negocio ['sku'] con valores distintos (se conservan)
+[OK] promotions: clave de negocio única
+PENDIENTE purchase_orders: 200 filas comparten clave de negocio ['po_id', 'store_id', 'sku'] con valores distintos (se conservan)
+PENDIENTE sales_daily: 8 filas comparten clave de negocio ['date', 'store_id', 'sku'] con valores distintos (se conservan)
+[OK] sites: clave de negocio única
+[OK] store_closures: clave de negocio única
+[OK] store_daily_kpis: clave de negocio única
+[OK] stores: clave de negocio única
+[OK] suppliers: clave de negocio única
+[OK] weather_daily: clave de negocio única
+PENDIENTE integridad: product_barcodes.sku -> products: 40 filas inválidas
+PENDIENTE integridad: stores.site_id -> sites: 1 filas inválidas
+PENDIENTE integridad: prices.store_id -> stores: 39 filas inválidas
+PENDIENTE integridad: prices.sku -> products: 96 filas inválidas
+PENDIENTE integridad: purchase_orders.sku -> products: 3545 filas inválidas
+PENDIENTE integridad: purchase_orders.supplier_id -> suppliers: 50 filas inválidas
+PENDIENTE integridad: sales_daily.store_id -> stores: 74 filas inválidas
+PENDIENTE integridad: sales_daily.sku -> products: 7104 filas inválidas
+PENDIENTE integridad: sales_daily.promo_id -> promotions: 60 filas inválidas
+PENDIENTE integridad: inventory_daily.sku -> products: 8213 filas inválidas
+PENDIENTE integridad: products.sku (inventory_tracked=1) -> inventory_daily: 1 filas inválidas
+
+REGLAS DISPARADAS (casos totales, tras limpieza):
+  - calendar: quarter_idx_no_calendario [Dato válido que debe conservarse] = 274
+  - inventory_daily: cantidad_negativa [Anomalía sospechosa] = 393
+  - inventory_daily: continuidad_apertura_vs_cierre_previo [Anomalía sospechosa] = 2594
+  - inventory_daily: ecuacion_inventario_no_cuadra [Inconsistencia relacional] = 2195
+  - inventory_daily: ref_invalida_sku [Inconsistencia relacional] = 8213
+  - inventory_daily: stockout_hours_fuera_de_0_24 [Error confirmado] = 60
+  - inventory_daily: unidades_vs_sales_daily [Inconsistencia relacional] = 343
+  - prices: clave_duplicada_con_diferencias [Posible duplicado] = 103
+  - prices: columna_constante_currency [Anomalía sospechosa] = 3057
+  - prices: columna_constante_price_list [Anomalía sospechosa] = 3057
+  - prices: fecha_invalida_effective_from [Error confirmado] = 23
+  - prices: hueco_entre_vigencias [Anomalía sospechosa] = 29
+  - prices: no_numerico_unit_price [Error confirmado] = 17
+  - prices: precio_cero_o_negativo [Anomalía sospechosa] = 39
+  - prices: precio_faltante [Dato faltante] = 17
+  - prices: precio_vs_base_extremo [Anomalía sospechosa] = 70
+  - prices: ref_invalida_sku [Inconsistencia relacional] = 96
+  - prices: ref_invalida_store_id [Inconsistencia relacional] = 39
+  - prices: vigencia_invertida [Error confirmado] = 61
+  - prices: vigencias_traslapadas [Anomalía sospechosa] = 98
+  - product_barcodes: barcode_en_varios_sku [Posible duplicado] = 30
+  - product_barcodes: barcode_formato_vs_tipo [Anomalía sospechosa] = 20
+  - product_barcodes: clave_duplicada_con_diferencias [Posible duplicado] = 15
+  - product_barcodes: ref_invalida_sku [Inconsistencia relacional] = 40
+  - product_barcodes: sku_con_varios_barcodes [Dato válido que debe conservarse] = 878
+  - products: clave_duplicada_con_diferencias [Posible duplicado] = 27
+  - products: columna_constante_brand [Anomalía sospechosa] = 1018
+  - products: costo_precio_cero_o_negativo [Anomalía sospechosa] = 153
+  - products: descontinuado_antes_de_lanzamiento [Anomalía sospechosa] = 126
+  - products: estado_vs_fecha_descontinuacion [Anomalía sospechosa] = 6
+  - products: precio_menor_que_costo [Anomalía sospechosa] = 10
+  - products: shelf_life_cero [Anomalía sospechosa] = 4
+  - products: shelf_life_negativo [Error confirmado] = 1
+  - products: sku_repetido_con_diferencias [Posible duplicado] = 27
+  - products: sku_sin_codigo_de_barras [Dato faltante] = 13
+  - products: unit_cost_faltante [Dato faltante] = 40
+  - promotions: categoria_vacia [Dato válido que debe conservarse] = 5
+  - promotions: inicio_posterior_a_fin [Error confirmado] = 1
+  - purchase_orders: cantidad_pedida_no_positiva [Error confirmado] = 27
+  - purchase_orders: clave_duplicada_con_diferencias [Posible duplicado] = 100
+  - purchase_orders: costo_vs_maestro_extremo [Anomalía sospechosa] = 1649
+  - purchase_orders: delivered_incompleto [Anomalía sospechosa] = 65
+  - purchase_orders: expected_date_faltante [Dato faltante] = 100
+  - purchase_orders: no_multiplo_case_size [Anomalía sospechosa] = 44
+  - purchase_orders: proveedor_distinto_al_maestro [Inconsistencia relacional] = 50
+  - purchase_orders: recepcion_faltante_en_transito [Dato válido que debe conservarse] = 1179
+  - purchase_orders: recepcion_faltante_no_transito [Dato faltante] = 78
+  - purchase_orders: recibida_antes_de_pedido [Error confirmado] = 60
+  - purchase_orders: recibida_tarde [Dato válido que debe conservarse] = 20195
+  - purchase_orders: recibido_mayor_que_pedido [Anomalía sospechosa] = 74
+  - purchase_orders: ref_invalida_sku [Inconsistencia relacional] = 3545
+  - purchase_orders: ref_invalida_supplier_id [Inconsistencia relacional] = 50
+  - purchase_orders: unit_cost_faltante [Dato faltante] = 17
+  - sales_daily: bruto_distinto_unidades_por_precio [Inconsistencia relacional] = 666
+  - sales_daily: clave_duplicada_con_diferencias [Posible duplicado] = 4
+  - sales_daily: descuento_negativo_o_mayor_que_bruto [Anomalía sospechosa] = 29
+  - sales_daily: fecha_invalida_date [Error confirmado] = 52
+  - sales_daily: neto_distinto_bruto_menos_descuento [Inconsistencia relacional] = 180
+  - sales_daily: promo_con_fechas_invalidas [Inconsistencia relacional] = 838
+  - sales_daily: promo_sin_descuento [Anomalía sospechosa] = 583
+  - sales_daily: ref_invalida_promo_id [Inconsistencia relacional] = 60
+  - sales_daily: ref_invalida_sku [Inconsistencia relacional] = 7104
+  - sales_daily: ref_invalida_store_id [Inconsistencia relacional] = 74
+  - sales_daily: unidades_extremas [Anomalía sospechosa] = 1399
+  - sales_daily: unidades_negativas [Anomalía sospechosa] = 150
+  - sales_daily: units_sold_faltante [Dato faltante] = 100
+  - sales_daily: venta_antes_de_apertura [Anomalía sospechosa] = 120
+  - sales_daily: venta_en_cierre_S006 [Anomalía sospechosa] = 47
+  - sales_daily: venta_en_cierre_S021 [Anomalía sospechosa] = 53
+  - sales_daily: venta_en_cierre_S031 [Anomalía sospechosa] = 37
+  - sales_daily: venta_en_cierre_S036 [Anomalía sospechosa] = 24
+  - sales_daily: venta_en_cierre_S037 [Anomalía sospechosa] = 39
+  - store_closures: cierre_de_un_dia [Dato válido que debe conservarse] = 2
+  - store_daily_kpis: afluencia_cero [Dato válido que debe conservarse] = 30
+  - store_daily_kpis: footfall_faltante [Dato faltante] = 50
+  - store_daily_kpis: kpi_vs_sales_daily [Inconsistencia relacional] = 965
+  - store_daily_kpis: staff_hours_extremo [Anomalía sospechosa] = 12
+  - store_daily_kpis: staff_hours_negativo [Anomalía sospechosa] = 10
+  - store_daily_kpis: transacciones_mayor_que_afluencia [Anomalía sospechosa] = 70
+  - stores: horario_24h_00_00 [Dato válido que debe conservarse] = 8
+  - stores: horario_faltante [Dato faltante] = 5
+  - stores: nombre_con_formato_irregular [Anomalía sospechosa] = 2
+  - stores: ref_invalida_site_id [Inconsistencia relacional] = 1
+  - stores: tienda_sin_ventas [Inconsistencia relacional] = 2
+  - weather_daily: precip_faltante [Dato faltante] = 60
+  - weather_daily: temperatura_fuera_de_rango [Anomalía sospechosa] = 40
+  - weather_daily: tmax_menor_que_tmin [Error confirmado] = 25
+
+LIMITACIONES
+- Los reportes anomalies/manual_review muestran como máximo 500 filas por regla; el detalle completo está en data/reports/detail/.
+- No se imputó ningún valor faltante ni se corrigió ninguna cifra: solo espacios, moneda y marcadores '#N/A', y duplicados exactos.
+- Sin información externa no se puede saber qué fila es correcta en conflictos de SKU, fechas invertidas o ecuaciones de inventario rotas.
+- No se validó el precio de venta contra prices.csv (cobertura parcial de tienda/SKU).

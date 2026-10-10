@@ -1,0 +1,15 @@
+file,rows_raw,rows_cleaned,columns,exact_duplicate_rows_removed,rows_with_duplicate_business_key_after_cleaning,missing_cells_clean,rules_triggered,total_flagged_cases,business_key
+calendar,365,365,10,0,0,340,1,274,date
+inventory_daily,494111,493611,11,500,0,0,6,13798,date + store_id + sku
+prices,3097,3057,9,40,207,2309,13,6706,store_id + sku + effective_from
+product_barcodes,1457,1457,3,0,30,0,5,983,barcode
+products,1028,1018,18,10,54,1059,11,1425,sku
+promotions,13,13,10,0,0,5,2,6,promo_id
+purchase_orders,262748,262748,11,0,200,2553,15,27233,po_id + store_id + sku
+sales_daily,592602,589602,9,3000,8,519467,19,11559,date + store_id + sku
+sites,20,20,5,0,0,0,0,0,site_id
+store_closures,7,7,4,0,0,0,1,2,store_id + start_date
+store_daily_kpis,12809,12784,8,25,0,50,6,1137,store_id + date
+stores,40,40,11,0,0,43,5,18,store_id
+suppliers,8,8,8,0,0,0,0,0,supplier_id
+weather_daily,7320,7300,5,20,0,60,3,125,site_id + date
