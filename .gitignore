@@ -9,3 +9,6 @@ __pycache__/
 
 .vscode/
 .idea/
+
+# Dataset sintético: uso exclusivo del hackathon, no redistribuir.
+data/

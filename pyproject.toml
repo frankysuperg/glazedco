@@ -1,0 +1,13 @@
+[project]
+name = "glazedco"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary,pool]>=3.2,<4", "python-dotenv>=1.2,<2", "pandas>=2.2,<4", "pyarrow>=17"]
+
+[dependency-groups]
+dev = ["pytest>=8,<10"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["db: integración de solo lectura; requiere DATABASE_URL"]
