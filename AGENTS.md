@@ -9,6 +9,7 @@
 - Python con `uv`, pandas, scikit-learn (Prophet solo si aporta), FastAPI, PostgreSQL, Gemini, FastMCP y TrendsAPI.
 
 ## Desarrollo y datos
+- La base es PostgreSQL en Tiger Data, ya poblada; ningún agente modifica su esquema ni sus datos.
 - Haz el cambio mínimo solicitado; usa módulos pequeños, tipado y pruebas pytest.
 - Mantén secretos en variables de entorno y `.env.example` sin valores reales.
 - Nunca inventes datos, métricas, resultados SQL ni fuentes.
