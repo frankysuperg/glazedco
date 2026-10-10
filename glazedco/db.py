@@ -62,9 +62,9 @@ class Database:
     def __init__(self, *, assistant: bool = False) -> None:
         load_environment()
         primary = os.getenv("DATABASE_URL", "").strip()
-        if not primary:
-            raise DatabaseError("Falta DATABASE_URL en el entorno o en .env.")
         readonly = os.getenv("DATABASE_URL_READONLY", "").strip()
+        if not primary and not (assistant and readonly):
+            raise DatabaseError("Falta DATABASE_URL en el entorno o en .env.")
         self.assistant_source = "DATABASE_URL_READONLY" if readonly else "DATABASE_URL"
         self.source = self.assistant_source if assistant else "DATABASE_URL"
         self._pool = ConnectionPool(

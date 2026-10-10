@@ -10,6 +10,7 @@ dependencies = [
     "scikit-learn>=1.9.1",
     "google-genai>=2.29.0",
     "sqlglot>=30,<31",
+    "fastmcp>=3,<4",
 ]
 
 [dependency-groups]
