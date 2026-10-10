@@ -14,3 +14,8 @@ __pycache__/
 data/
 
 reports/*.csv
+.vs/
+.venv/
+.env
+__pycache__/
+data/
